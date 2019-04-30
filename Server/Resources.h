@@ -1,11 +1,25 @@
 #pragma once
 //Server Constants------------------------
 #define CMD_SIZE 128
-//COORDINATES
+
+//GAME SETTINGS---------------------------
+struct gameSettings_STRUCT {
+	int maxPlayers,
+		levels,
+		speedUps,
+		slowDowns,
+		duration,
+		speedUpChance,
+		slowDownChance,
+		lives;
+} typedef _gameSettings;
+
+//COORDINATES-----------------------------
 struct coordinates_STRUCT {
 	int x,
 		y;
 } typedef _coordinates;
+
 //GAME AREA-------------------------------
 struct gameArea_STRUCT {
 	int width,
