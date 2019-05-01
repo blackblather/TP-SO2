@@ -1,5 +1,5 @@
 # TP-SO2
-Arkanoid game coded in C, using the <b><i>Windows API</i></b>.<br>
+Arkanoid game coded in <b><i>C</i></b>, using the <b><i>Windows API</i></b>.<br>
 <hr>
 <h2>General Idea:</h2>
 The game is built on a client-server architecture, and supports multiple players/spectators.<br>
