@@ -1,7 +1,7 @@
 #pragma once
 //Server Constants------------------------
 #define CMD_SIZE 128
-
+#define MAPPED_FILE_NAME _T("../Server/SharedInfo.txt")
 //GAME SETTINGS---------------------------
 struct gameSettings_STRUCT {
 	int maxPlayers,
@@ -11,7 +11,9 @@ struct gameSettings_STRUCT {
 		duration,
 		speedUpChance,
 		slowDownChance,
-		lives;
+		lives,
+		width,
+		height;
 } typedef _gameSettings;
 
 //COORDINATES-----------------------------
@@ -19,12 +21,6 @@ struct coordinates_STRUCT {
 	int x,
 		y;
 } typedef _coordinates;
-
-//GAME AREA-------------------------------
-struct gameArea_STRUCT {
-	int width,
-		height;
-} typedef _gameArea;
 
 //BALL------------------------------------
 enum ballDirection_ENUM {
