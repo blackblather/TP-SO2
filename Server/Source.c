@@ -6,6 +6,7 @@
 //File mapping vars
 HANDLE hFile;
 HANDLE hFileMapping;
+HANDLE hThreadBall;
 LPVOID dataStart, dataIterator, messageStart, messageIterator;
 
 
@@ -66,26 +67,27 @@ void CloseSharedInfoHandles() {
 DWORD WINAPI ThreadBall(LPVOID lpParameter) {
 }
 BOOL InitThreadBall() {
-	HANDLE hThreadBall = CreateThread(
-		NULL,			//hThreadUsers cannot be inherited by child processes
-		0,				//Default stack size
-		ThreadBall,		//Function to execute
-		NULL,			//Function param
-		0,				//Runs imediatly
-		NULL			//Thread ID is not stored anywhere
+	hThreadBall = CreateThread(
+		NULL,				//hThreadUsers cannot be inherited by child processes
+		0,					//Default stack size
+		ThreadBall,			//Function to execute
+		NULL,				//Function param
+		CREATE_SUSPENDED,	//Wait for game to start, to start thread execution
+		NULL				//Thread ID is not stored anywhere
 	);
-	if (hThreadBall == NULL) {
-		_tprintf(_T("ERROR CREATING THREAD: 'hThreadBall'\n"));
-		return FALSE;
-	}
-	return TRUE;
+	if (hThreadBall != NULL)
+		return TRUE;
+	_tprintf(_T("ERROR CREATING THREAD: 'hThreadBall'\n"));
+	return FALSE;
 }
 //Threads
 BOOL InitThreads() {
-	_tprintf(_T("All threads initialized successfully. [NEED TO INITIALIZE USER THREAD STILL]\n"));
-	return TRUE;
-	//_tprintf(_T("Error code: 0x%x\n"), GetLastError());
-	//return FALSE;
+	if (InitThreadBall()) {
+		_tprintf(_T("All threads created successfully. [NEED TO INITIALIZE USER THREAD STILL]\n"));
+		return TRUE;
+	}
+	_tprintf(_T("Error code: 0x%x\n"), GetLastError());
+	return FALSE;
 }
 
 //Game -> Initializations
@@ -212,10 +214,10 @@ INT GetActiveBalls(_ball* ball, INT maxBalls) {
 }
 //Game -> Command
 void Start() {
-	if (InitThreadBall())
+	if (ResumeThread(hThreadBall) != -1)
 		_tprintf(_T("Successfully initialized thread: 'ThreadBall'\n"));
 	else
-		_tprintf(_T("\n"));
+		_tprintf(_T("Error starting game.\nError code: 0x%x\n"), GetLastError());
 }
 void ShowTop10(PHKEY topTenKey) {
 
