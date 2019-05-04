@@ -3,10 +3,6 @@
 #include <Windows.h> 
 #include "Resources.h"
  
-//Game vars
-_ball ball;
-_gameSettings gameSettings;
-
 //File mapping vars
 HANDLE hFile;
 HANDLE hFileMapping;
@@ -32,18 +28,20 @@ BOOL LoadSharedInfo() {
 		FILE_ATTRIBUTE_NORMAL,					//Flags and attributes
 		NULL);									//Template File (not used)
 	if (hFile != INVALID_HANDLE_VALUE) {
+		SYSTEM_INFO sysInfo;
+		GetSystemInfo(&sysInfo);
 		_tprintf(_T("Successfully opened file: %s\n"), MAPPED_FILE_NAME);
 		//SRC #2: https://docs.microsoft.com/en-us/windows/desktop/api/WinBase/nf-winbase-createfilemappinga
 		hFileMapping = CreateFileMapping(hFile,
 			NULL,
 			PAGE_READWRITE,
 			0,									//Size in bytes	(high-order)
-			65536*2,							//Size in bytes (low-order)
+			sysInfo.dwAllocationGranularity*2,							//Size in bytes (low-order)
 			_T("LocalSharedInfo"));
 		
 		if (hFileMapping != NULL) {
 			_tprintf(_T("Successfully mapped file in memory\n"));
-			if ((dataStart = LoadFileView(0, 65536)) != NULL && (messageStart = LoadFileView(65536, 65536)) != NULL) {
+			if ((dataStart = LoadFileView(0, sysInfo.dwAllocationGranularity)) != NULL && (messageStart = LoadFileView(sysInfo.dwAllocationGranularity, sysInfo.dwAllocationGranularity)) != NULL) {
 				_tprintf(_T("Successfully created file views\n"));
 				dataIterator = dataStart;
 				messageIterator = messageStart;
@@ -64,24 +62,50 @@ void CloseSharedInfoHandles() {
 	CloseHandle(hFile);
 }
 
-//Game -> GameSettings
+//Threads -> Ball
+DWORD WINAPI ThreadBall(LPVOID lpParameter) {
+}
+BOOL InitThreadBall() {
+	HANDLE hThreadBall = CreateThread(
+		NULL,			//hThreadUsers cannot be inherited by child processes
+		0,				//Default stack size
+		ThreadBall,		//Function to execute
+		NULL,			//Function param
+		0,				//Runs imediatly
+		NULL			//Thread ID is not stored anywhere
+	);
+	if (hThreadBall == NULL) {
+		_tprintf(_T("ERROR CREATING THREAD: 'hThreadBall'\n"));
+		return FALSE;
+	}
+	return TRUE;
+}
+//Threads
+BOOL InitThreads() {
+	_tprintf(_T("All threads initialized successfully. [NEED TO INITIALIZE USER THREAD STILL]\n"));
+	return TRUE;
+	//_tprintf(_T("Error code: 0x%x\n"), GetLastError());
+	//return FALSE;
+}
+
+//Game -> Initializations
 BOOL InitializeEmptyTopTen(PHKEY topTenKey) {
 	//NEW REGISTRY KEY	(initizlizes all positions to -1)
-	INT defaultValue = -1;
+	INT defaultValue = 0;		//8bit value -> range [0, 255]
 	_TCHAR name[] = "1";
 	LSTATUS valueStatus;
 	for (int i = 0; i < 9; i++) {
-		if ((valueStatus = RegSetValueExA(*topTenKey, name, 0, REG_DWORD, &defaultValue, sizeof(defaultValue))) == ERROR_SUCCESS)	//inicializa as primeiras 9 posições
+		if ((valueStatus = RegSetValueEx(*topTenKey, name, 0, REG_DWORD, &defaultValue, sizeof(defaultValue))) == ERROR_SUCCESS)	//inicializa as primeiras 9 posições
 			name[0]++;
 		else {
-			_tprintf(_T("ERROR INITIALIZING VALUE NAMED: %s\nError code: %l\n", name, valueStatus));
+			_tprintf(_T("ERROR INITIALIZING VALUE NAMED: %s\nError code: %ld\n"), name, valueStatus);
 			return FALSE;
 		}
 	}
-	if ((valueStatus = RegSetValueExA(*topTenKey, "10", 0, REG_DWORD, &defaultValue, sizeof(defaultValue))) == ERROR_SUCCESS)		//inicializa 10ª posição
+ 	if ((valueStatus = RegSetValueEx(*topTenKey, "10", 0, REG_DWORD, &defaultValue, sizeof(defaultValue))) == ERROR_SUCCESS)		//inicializa 10ª posição
 		name[0]++;
 	else {
-		_tprintf(_T("ERROR INITIALIZING VALUE NAMED: %s\nError code: %l\n", name, valueStatus));
+		_tprintf(_T("ERROR INITIALIZING VALUE NAMED: %s\nError code: %ld\n"), name, valueStatus);
 		return FALSE;
 	}
 	return TRUE;
@@ -108,41 +132,59 @@ BOOL LoadTopTen(PHKEY topTenKey) {
 			_tprintf(_T("Opened existing RegKey: HKEY_CURRENT_USER\\Arkanoid_Top_Ten\n"));
 		return TRUE;
 	} else
-		_tprintf(_T("ERROR OPENING REGKEY\nError code: %l\n", keyStatus));
+		_tprintf(_T("ERROR OPENING REGKEY\nError code: %ld\n"), keyStatus);
 	return FALSE;
 }
-BOOL LoadDefaults(_TCHAR* fileName) {
+BOOL LoadBallsArray(_ball** ball, INT maxBalls, INT speed, INT size, INT gameAreaWidth, INT gameAreaHeight) {
+	(*ball) = (_ball*)malloc(maxBalls * sizeof(_ball));
+	if ((*ball) == NULL) {
+		_tprintf(_T("ERROR LOADING BALLS ARRAY\n"));
+		return FALSE;
+	}
+	else {
+		for (INT i = 0; i < maxBalls; i++) {
+			(*ball)[i].direction = topRight;
+			(*ball)[i].size = size;
+			(*ball)[i].coordinates.x = (gameAreaWidth/2) - ((*ball)[i].size/2);
+			(*ball)[i].coordinates.y = (gameAreaHeight - 50);
+			(*ball)[i].speed = speed;
+			(*ball)[i].isActive = FALSE;
+		}
+		return TRUE;
+	}
+}
+BOOL LoadGameSettings(_TCHAR* fileName, _gameSettings* gameSettings, _ball** ball) {
 	FILE *fp;
 	if (_tfopen_s(&fp, fileName, _T("r")) == 0) {
 		_tprintf(_T("Successfully opened file: %s\n"), fileName);
 
-		//Game Area
 		_TCHAR val[10];
 		_fgetts(val, 10, fp);
-		gameSettings.maxPlayers = _tstoi(val);
+		gameSettings->maxPlayers = _tstoi(val);
 		_fgetts(val, 10, fp);
-		gameSettings.levels = _tstoi(val);
+		gameSettings->maxBalls = _tstoi(val);
 		_fgetts(val, 10, fp);
-		gameSettings.speedUps = _tstoi(val);
+		gameSettings->defaultBallSpeed = _tstoi(val);
 		_fgetts(val, 10, fp);
-		gameSettings.slowDowns = _tstoi(val);
+		gameSettings->defaultBallSize = _tstoi(val);
 		_fgetts(val, 10, fp);
-		gameSettings.duration = _tstoi(val);
+		gameSettings->levels = _tstoi(val);
 		_fgetts(val, 10, fp);
-		gameSettings.speedUpChance = _tstoi(val);
+		gameSettings->speedUps = _tstoi(val);
 		_fgetts(val, 10, fp);
-		gameSettings.slowDownChance = _tstoi(val);
+		gameSettings->slowDowns = _tstoi(val);
 		_fgetts(val, 10, fp);
-		gameSettings.lives = _tstoi(val);
+		gameSettings->duration = _tstoi(val);
 		_fgetts(val, 10, fp);
-		gameSettings.width = _tstoi(val);
+		gameSettings->speedUpChance = _tstoi(val);
 		_fgetts(val, 10, fp);
-		gameSettings.height = _tstoi(val);
-
-		//Ball
-		ball.direction = topRight;
-		ball.coordinates.x = (gameSettings.width / 2) - 1;	//horizontal-center
-		ball.coordinates.y = gameSettings.height - 1;		//vertical-bottom
+		gameSettings->slowDownChance = _tstoi(val);
+		_fgetts(val, 10, fp);
+		gameSettings->lives = _tstoi(val);
+		_fgetts(val, 10, fp);
+		gameSettings->dimensions.width = _tstoi(val);
+		_fgetts(val, 10, fp);
+		gameSettings->dimensions.height = _tstoi(val);
 
 		fclose(fp);
 		return TRUE;
@@ -151,17 +193,36 @@ BOOL LoadDefaults(_TCHAR* fileName) {
 		_tprintf(_T("ERROR OPENING FILE: %s\n"), fileName);
 	return FALSE;
 }
-BOOL LoadGameSettings(_TCHAR* fileName, PHKEY topTenKey) {
-	if (LoadDefaults(fileName) && LoadTopTen(topTenKey))
+BOOL Initialize(_TCHAR* defaultsFileName, _gameSettings* gameSettings, _ball** ball, PHKEY topTenKey) {
+	if (LoadSharedInfo() &&
+		LoadGameSettings(defaultsFileName, gameSettings, ball) &&
+		LoadBallsArray(ball, gameSettings->maxBalls, gameSettings->defaultBallSpeed, gameSettings->defaultBallSize, gameSettings->dimensions.width, gameSettings->dimensions.height) &&
+		LoadTopTen(topTenKey) &&
+		InitThreads())
 		return TRUE;
 	return FALSE;
 }
+//Game -> Balls
+INT GetActiveBalls(_ball* ball, INT maxBalls) {
+	INT total = 0;
+	for (INT i = 0; i < maxBalls; i++)
+		if (ball[i].isActive)
+			total++;
+	return total;
+}
 //Game -> Command
+void Start() {
+	if (InitThreadBall())
+		_tprintf(_T("Successfully initialized thread: 'ThreadBall'\n"));
+	else
+		_tprintf(_T("\n"));
+}
 void ShowTop10(PHKEY topTenKey) {
 
 }
 void Help() {
 	_tprintf(_T("Available commands: \n"));
+	_tprintf(_T("start -> Starts the game for connected clients.\n"));
 	_tprintf(_T("showTop10 -> Lists top 10 scores.\n"));
 	_tprintf(_T("exit -> Orderly closes the server.\n"));
 }
@@ -175,6 +236,8 @@ void CmdLoop() {
 		_tscanf_s(_T("%s"), cmd, CMD_SIZE - 1);
 		if (_tcscmp(cmd, _T("help")) == 0)
 			Help();
+		else if (_tcscmp(cmd, _T("start")) == 0)
+			Start();
 		else if (_tcscmp(cmd, _T("showTop10")) == 0)
 		{
 
@@ -185,9 +248,12 @@ void CmdLoop() {
 //Main
 int _tmain(int argc, const _TCHAR* argv[]) {
 	if (argc == 2) {
+		//Game vars
+		_gameSettings gameSettings;
+		_ball* ball;
 		HKEY topTenKey;
 		_tprintf(_T("Arkanoid server:\nExecutable location: %s\n-------------------------------------------\nInitializing...\n"), argv[0]);
-		if (LoadSharedInfo() && LoadGameSettings(argv[1], &topTenKey)) {
+		if (Initialize(argv[1], &gameSettings, &ball, &topTenKey)) {
 			_tprintf(_T("Done!\n"));
 			CmdLoop();
 			CloseSharedInfoHandles();
