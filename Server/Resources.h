@@ -2,25 +2,33 @@
 //Server Constants------------------------
 #define CMD_SIZE 128
 #define MAPPED_FILE_NAME _T("../Server/SharedInfo.txt")
-//GAME SETTINGS---------------------------
-struct gameSettings_STRUCT {
-	int maxPlayers,
-		levels,
-		speedUps,
-		slowDowns,
-		duration,
-		speedUpChance,
-		slowDownChance,
-		lives,
-		width,
+//RECTANGLE-------------------------------
+struct rect_STRUCT {
+	int width,
 		height;
-} typedef _gameSettings;
+} typedef _rect;
 
 //COORDINATES-----------------------------
 struct coordinates_STRUCT {
 	int x,
 		y;
 } typedef _coordinates;
+
+//GAME SETTINGS---------------------------
+struct gameSettings_STRUCT {
+	int maxPlayers,
+		maxBalls,
+		defaultBallSpeed,
+		defaultBallSize,
+		levels,
+		speedUps,
+		slowDowns,
+		duration,
+		speedUpChance,
+		slowDownChance,
+		lives;
+	_rect dimensions;
+} typedef _gameSettings;
 
 //BALL------------------------------------
 enum ballDirection_ENUM {
@@ -32,7 +40,9 @@ enum ballDirection_ENUM {
 struct ball_STRUCT {
 	_ballDirection direction;
 	_coordinates coordinates;
-	int speed;
+	int size,
+		speed;
+	BOOL isActive;
 } typedef _ball;
 
 //BASE------------------------------------
@@ -51,7 +61,7 @@ enum blockType_ENUM {
 struct block_STRUCT {
 	_blockType type;
 	_coordinates coordinates;
-	int size;
+	_rect dimensions;
 } typedef _block;
 
 //PERK------------------------------------
@@ -59,6 +69,7 @@ enum perkType_ENUM {
 	speedUp,
 	slowDown,
 	extraLife,
+	extraBall,
 	triple
 } typedef _perkType;
 struct perk_STRUCT {
