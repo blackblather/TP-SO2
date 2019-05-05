@@ -155,6 +155,20 @@ BOOL LoadBallsArray(_ball** ball, INT maxBalls, INT speed, INT size, INT gameAre
 		return TRUE;
 	}
 }
+BOOL LoadClientsArray(_client** client, INT maxClients) {
+	(*client) = (_client*)malloc(maxClients * sizeof(_client));
+	if ((*client) == NULL) {
+		_tprintf(_T("ERROR LOADING CLIENTS ARRAY\n"));
+		return FALSE;
+	}
+	else {
+		for (INT i = 0; i < maxClients; i++) {
+			(*client)->id = -1;
+			memset((*client)->username, 0, USERNAME_MAX_LENGHT);
+		}
+		return TRUE;
+	}
+}
 BOOL LoadGameSettings(_TCHAR* fileName, _gameSettings* gameSettings, _ball** ball) {
 	FILE *fp;
 	if (_tfopen_s(&fp, fileName, _T("r")) == 0) {
@@ -163,6 +177,8 @@ BOOL LoadGameSettings(_TCHAR* fileName, _gameSettings* gameSettings, _ball** bal
 		_TCHAR val[10];
 		_fgetts(val, 10, fp);
 		gameSettings->maxPlayers = _tstoi(val);
+		_fgetts(val, 10, fp);
+		gameSettings->maxSpectators = _tstoi(val);
 		_fgetts(val, 10, fp);
 		gameSettings->maxBalls = _tstoi(val);
 		_fgetts(val, 10, fp);
@@ -195,10 +211,12 @@ BOOL LoadGameSettings(_TCHAR* fileName, _gameSettings* gameSettings, _ball** bal
 		_tprintf(_T("ERROR OPENING FILE: %s\n"), fileName);
 	return FALSE;
 }
-BOOL Initialize(_TCHAR* defaultsFileName, _gameSettings* gameSettings, _ball** ball, PHKEY topTenKey) {
+BOOL Initialize(_TCHAR* defaultsFileName, _gameSettings* gameSettings, _ball** ball, _client** players, _client** spectators, PHKEY topTenKey) {
 	if (LoadSharedInfo() &&
 		LoadGameSettings(defaultsFileName, gameSettings, ball) &&
 		LoadBallsArray(ball, gameSettings->maxBalls, gameSettings->defaultBallSpeed, gameSettings->defaultBallSize, gameSettings->dimensions.width, gameSettings->dimensions.height) &&
+		LoadClientsArray(players, gameSettings->maxPlayers) &&
+		LoadClientsArray(spectators, gameSettings->maxSpectators) &&
 		LoadTopTen(topTenKey) &&
 		InitThreads())
 		return TRUE;
@@ -253,9 +271,11 @@ int _tmain(int argc, const _TCHAR* argv[]) {
 		//Game vars
 		_gameSettings gameSettings;
 		_ball* ball;
+		_client* players;
+		_client* spectators;
 		HKEY topTenKey;
 		_tprintf(_T("Arkanoid server:\nExecutable location: %s\n-------------------------------------------\nInitializing...\n"), argv[0]);
-		if (Initialize(argv[1], &gameSettings, &ball, &topTenKey)) {
+		if (Initialize(argv[1], &gameSettings, &ball, &players, &spectators, &topTenKey)) {
 			_tprintf(_T("Done!\n"));
 			CmdLoop();
 			CloseSharedInfoHandles();
