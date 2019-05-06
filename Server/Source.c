@@ -1,10 +1,10 @@
 #include <stdio.h>
+#include <time.h> 
 #include <tchar.h>
 #include <Windows.h> 
 #include "Resources.h"
  
 //File mapping vars
-HANDLE hFile;
 HANDLE hFileMapping;
 HANDLE hThreadBall;
 LPVOID dataStart, dataIterator, messageStart, messageIterator;
@@ -21,19 +21,19 @@ LPVOID LoadFileView(int offset, int size) {
 }
 BOOL LoadSharedInfo() {
 	//SRC #1: https://docs.microsoft.com/pt-pt/windows/desktop/api/fileapi/nf-fileapi-createfilea
-	hFile = CreateFile(MAPPED_FILE_NAME,		//File name
+	/*hFile = CreateFile(MAPPED_FILE_NAME,		//File name
 		GENERIC_READ | GENERIC_WRITE,			//Access
 		FILE_SHARE_READ | FILE_SHARE_WRITE,		//Share mode
 		NULL,									//Security attributes
 		OPEN_EXISTING,							//Creation disposition
 		FILE_ATTRIBUTE_NORMAL,					//Flags and attributes
 		NULL);									//Template File (not used)
-	if (hFile != INVALID_HANDLE_VALUE) {
+	if (hFile != INVALID_HANDLE_VALUE) {*/
 		SYSTEM_INFO sysInfo;
 		GetSystemInfo(&sysInfo);
-		_tprintf(_T("Successfully opened file: %s\n"), MAPPED_FILE_NAME);
+		//_tprintf(_T("Successfully opened file: %s\n"), MAPPED_FILE_NAME);
 		//SRC #2: https://docs.microsoft.com/en-us/windows/desktop/api/WinBase/nf-winbase-createfilemappinga
-		hFileMapping = CreateFileMapping(hFile,
+		hFileMapping = CreateFileMapping(INVALID_HANDLE_VALUE,
 			NULL,
 			PAGE_READWRITE,
 			0,									//Size in bytes	(high-order)
@@ -51,21 +51,72 @@ BOOL LoadSharedInfo() {
 				_tprintf(_T("ERROR CREATING FILE VIEWS.\n"));
 		} else
 			_tprintf(_T("ERROR MAPPING FILE.\n"));
-	} else
-		_tprintf(_T("ERROR OPENING FILE: %s\n"), MAPPED_FILE_NAME);
+	/*} else
+		_tprintf(_T("ERROR OPENING FILE: %s\n"), MAPPED_FILE_NAME);*/
 	_tprintf(_T("Error code: 0x%x\n"), GetLastError());
 	return FALSE;
 }
-void CloseSharedInfoHandles() {
+VOID CloseSharedInfoHandles() {
 	UnmapViewOfFile(messageStart);
 	UnmapViewOfFile(dataStart);
 	CloseHandle(hFileMapping);
-	CloseHandle(hFile);
+	//CloseHandle(hFile);
+}
+VOID WriteToDataFileView(INT type, LPVOID val, INT offset, INT maxBlocks, INT maxBalls) {
+	dataIterator = dataStart;
+	switch (type) {
+		case 0: *((INT*)dataIterator) = *((INT*)val); break;	//Client_offset	(SEMAPHORE/MUTEX HERE)
+		case 1: {
+			dataIterator = (INT*)dataIterator + 1;
+			*((_gameSettings*)dataIterator) = *((_gameSettings*)val);
+		} break;
+		case 2: {
+			dataIterator = (INT*)dataIterator + 1;
+			dataIterator = (_gameSettings*)dataIterator + 1;
+			if (offset == -1) {		//Escreve todos os blocos
+				for (INT i = 0; i < maxBlocks; i++) {
+					*((_block*)dataIterator) = *((_block*)val);
+					dataIterator = (_block*)dataIterator + 1;
+				}
+			}
+			else if (offset >= 0) {	//Escreve só um bloco
+				dataIterator = (_block*)dataIterator + offset;
+				*((_block*)dataIterator) = *((_block*)val);
+			}
+			
+		} break;
+		case 3: {
+			dataIterator = (INT*)dataIterator + 1;
+			dataIterator = (_gameSettings*)dataIterator + 1;
+			dataIterator = (_block*)dataIterator + maxBlocks;
+			if (offset == -1) {		//Escreve todos as bolas
+				for (INT i = 0; i < maxBalls; i++) {
+					*((_ball*)dataIterator) = *((_ball*)val);
+					dataIterator = (_ball*)dataIterator + 1;
+				}
+			}
+			else if (offset >= 0) {	//Escreve só uma bola
+				dataIterator = (_ball*)dataIterator + offset;
+				*((_ball*)dataIterator) = *((_ball*)val);
+			}
+		} break;
+		case 4: {
+			dataIterator = (INT*)dataIterator + 1;
+			dataIterator = (_gameSettings*)dataIterator + 1;
+			dataIterator = (_block*)dataIterator + maxBlocks;
+			dataIterator = (_ball*)dataIterator + maxBalls;
+			*((_perk*)dataStart) = *((_perk*)val);
+		} break;
+		case 5: *((_base*)dataStart) = *((_base*)val); break;
+		case 6: *((_client*)dataStart) = *((_client*)val); break;
+	}
 }
 
 //Threads -> Ball
 DWORD WINAPI ThreadBall(LPVOID lpParameter) {
 }
+
+//Threads -> Initializations
 BOOL InitThreadBall() {
 	hThreadBall = CreateThread(
 		NULL,				//hThreadUsers cannot be inherited by child processes
@@ -80,7 +131,6 @@ BOOL InitThreadBall() {
 	_tprintf(_T("ERROR CREATING THREAD: 'hThreadBall'\n"));
 	return FALSE;
 }
-//Threads
 BOOL InitThreads() {
 	if (InitThreadBall()) {
 		_tprintf(_T("All threads created successfully. [NEED TO INITIALIZE USER THREAD STILL]\n"));
@@ -88,6 +138,68 @@ BOOL InitThreads() {
 	}
 	_tprintf(_T("Error code: 0x%x\n"), GetLastError());
 	return FALSE;
+}
+
+//Game -> Balls
+INT GetActiveBalls(_ball* ball, INT maxBalls) {
+	INT total = 0;
+	for (INT i = 0; i < maxBalls; i++)
+		if (ball[i].isActive)
+			total++;
+	return total;
+}
+
+//Game -> Blocks
+VOID InitBlocksrray(_block* block, INT size) {
+	for (INT i = 0; i < size; i++) {
+		block[i].coordinates.x = -1;
+		block[i].coordinates.y = -1;
+		block[i].type = normal;
+	}
+}
+BOOL BlockIsInPos(INT x, INT y, _block* block, INT size) {
+	for (INT i = 0; i < size; i++) {
+		if (block[i].coordinates.x == x && block[i].coordinates.y == y)
+			return TRUE;
+	}
+	return FALSE;
+}
+BOOL GenerateMap(UINT seed, _gameSettings* gameSettings, _block** block) {
+	//Regras para gerar blocos pseudo-aleatóriamente:
+	// (DONE) - Regra #1: Os blocos só podem aparecer a uma distancia >= (2*ball.size) dos edges do mapa
+	// (DONE) - Regra #2: Os blocos só podem existir em 75% da altura do mapa, a contar de cima para baixo
+	// (DONE) - Regra #3: Todos os blocos têm as mesmas dimensões
+	// (DONE) - Regra #4: Blocos seguidos não têm espaçamentos entre si
+
+	srand(seed);
+
+	INT borderPadding = gameSettings->defaultBallSize * 2,
+		usableWidth = (INT)(gameSettings->dimensions.width - borderPadding * 2),
+		usableHeight = (INT)((gameSettings->dimensions.height - borderPadding * 2)*0.75),
+		maxBlocksPerLine = (INT)(usableWidth / gameSettings->blockDimensions.width),
+		maxBlockLines = (INT)(usableHeight / gameSettings->blockDimensions.height),
+		maxBlocks = maxBlocksPerLine * maxBlockLines,
+		posX,
+		posY;
+
+	gameSettings->totalBlocks = ((INT)(maxBlocks*0.5)) + (rand() % ((INT)(maxBlocks*0.3)));	//No minimo, 50% dos espaço disponivel para os blocos (75% da area de jogo), é garantido estar ocupado. No máximo, 80% está ocupado
+	(*block) = (_block*)malloc(gameSettings->totalBlocks * sizeof(_block));
+	if ((*block) == NULL) {
+		_tprintf(_T("ERROR LOADING BLOCKS ARRAY\n"));
+		return FALSE;
+	}
+	else {
+		InitBlocksrray((*block), gameSettings->totalBlocks);
+		for (INT i = 0; i < gameSettings->totalBlocks; i++) {
+			do {
+				posX = borderPadding + ((rand() % maxBlocksPerLine) * gameSettings->blockDimensions.width);
+				posY = borderPadding + ((rand() % maxBlockLines) * gameSettings->blockDimensions.height);
+			} while (BlockIsInPos(posX, posY, (*block), i));	//Aqui uso "i" em vez do tamanho do array, porque nao vale a pena verificar espaços vazios do array
+			(*block)[i].coordinates.x = posX;
+			(*block)[i].coordinates.y = posY;
+		}
+		return TRUE;
+	}
 }
 
 //Game -> Initializations
@@ -155,21 +267,21 @@ BOOL LoadBallsArray(_ball** ball, INT maxBalls, INT speed, INT size, INT gameAre
 		return TRUE;
 	}
 }
-BOOL LoadClientsArray(_client** client, INT maxClients) {
-	(*client) = (_client*)malloc(maxClients * sizeof(_client));
-	if ((*client) == NULL) {
+BOOL LoadClientsArray(_client** player, INT maxClients) {
+	(*player) = (_client*)malloc(maxClients * sizeof(_client));
+	if ((*player) == NULL) {
 		_tprintf(_T("ERROR LOADING CLIENTS ARRAY\n"));
 		return FALSE;
 	}
 	else {
 		for (INT i = 0; i < maxClients; i++) {
-			(*client)->id = -1;
-			memset((*client)->username, 0, USERNAME_MAX_LENGHT);
+			(*player)->id = -1;
+			memset((*player)->username, 0, USERNAME_MAX_LENGHT);
 		}
 		return TRUE;
 	}
 }
-BOOL LoadGameSettings(_TCHAR* fileName, _gameSettings* gameSettings, _ball** ball) {
+BOOL LoadGameSettings(_TCHAR* fileName, _gameSettings* gameSettings) {
 	FILE *fp;
 	if (_tfopen_s(&fp, fileName, _T("r")) == 0) {
 		_tprintf(_T("Successfully opened file: %s\n"), fileName);
@@ -181,6 +293,8 @@ BOOL LoadGameSettings(_TCHAR* fileName, _gameSettings* gameSettings, _ball** bal
 		gameSettings->maxSpectators = _tstoi(val);
 		_fgetts(val, 10, fp);
 		gameSettings->maxBalls = _tstoi(val);
+		_fgetts(val, 10, fp);
+		gameSettings->maxPerks = _tstoi(val);
 		_fgetts(val, 10, fp);
 		gameSettings->defaultBallSpeed = _tstoi(val);
 		_fgetts(val, 10, fp);
@@ -203,6 +317,12 @@ BOOL LoadGameSettings(_TCHAR* fileName, _gameSettings* gameSettings, _ball** bal
 		gameSettings->dimensions.width = _tstoi(val);
 		_fgetts(val, 10, fp);
 		gameSettings->dimensions.height = _tstoi(val);
+		_fgetts(val, 10, fp);
+		gameSettings->blockDimensions.width = _tstoi(val);
+		_fgetts(val, 10, fp);
+		gameSettings->blockDimensions.height = _tstoi(val);
+
+		gameSettings->hasStarted = FALSE;
 
 		fclose(fp);
 		return TRUE;
@@ -211,42 +331,42 @@ BOOL LoadGameSettings(_TCHAR* fileName, _gameSettings* gameSettings, _ball** bal
 		_tprintf(_T("ERROR OPENING FILE: %s\n"), fileName);
 	return FALSE;
 }
-BOOL Initialize(_TCHAR* defaultsFileName, _gameSettings* gameSettings, _ball** ball, _client** players, _client** spectators, PHKEY topTenKey) {
+BOOL Initialize(_TCHAR* defaultsFileName, _gameSettings* gameSettings, _ball** ball, _block** block, _client** player, PHKEY topTenKey) {
 	if (LoadSharedInfo() &&
-		LoadGameSettings(defaultsFileName, gameSettings, ball) &&
+		LoadGameSettings(defaultsFileName, gameSettings) &&
 		LoadBallsArray(ball, gameSettings->maxBalls, gameSettings->defaultBallSpeed, gameSettings->defaultBallSize, gameSettings->dimensions.width, gameSettings->dimensions.height) &&
-		LoadClientsArray(players, gameSettings->maxPlayers) &&
-		LoadClientsArray(spectators, gameSettings->maxSpectators) &&
+		GenerateMap(time(0), gameSettings, block) &&
+		LoadClientsArray(player, gameSettings->maxPlayers) &&
 		LoadTopTen(topTenKey) &&
 		InitThreads())
 		return TRUE;
 	return FALSE;
 }
-//Game -> Balls
-INT GetActiveBalls(_ball* ball, INT maxBalls) {
-	INT total = 0;
-	for (INT i = 0; i < maxBalls; i++)
-		if (ball[i].isActive)
-			total++;
-	return total;
-}
+
 //Game -> Command
-void Start() {
+VOID Help() {
+	_tprintf(_T("-------------------------------------------\n"));
+	_tprintf(_T("Available commands: \n"));
+	_tprintf(_T("start -> Starts the game for connected clients.\n"));
+	_tprintf(_T("newMap -> Generates a new map if the game hasn't started yet.\n"));
+	_tprintf(_T("showTop10 -> Lists top 10 scores.\n"));
+	_tprintf(_T("exit -> Orderly closes the server.\n"));
+}
+VOID Start() {
 	if (ResumeThread(hThreadBall) != -1)
 		_tprintf(_T("Successfully initialized thread: 'ThreadBall'\n"));
 	else
 		_tprintf(_T("Error starting game.\nError code: 0x%x\n"), GetLastError());
 }
-void ShowTop10(PHKEY topTenKey) {
+VOID NewMap(_gameSettings* gameSettings, _block** block) {
+	free((*block));
+	if(GenerateMap(time(0), gameSettings, block))
+		_tprintf(_T("Successfully generated new map\n"));
+}
+VOID ShowTop10(PHKEY topTenKey) {
 
 }
-void Help() {
-	_tprintf(_T("Available commands: \n"));
-	_tprintf(_T("start -> Starts the game for connected clients.\n"));
-	_tprintf(_T("showTop10 -> Lists top 10 scores.\n"));
-	_tprintf(_T("exit -> Orderly closes the server.\n"));
-}
-void CmdLoop() {
+VOID CmdLoop(_gameSettings* gameSettings, _block** block) {
 	_TCHAR cmd[CMD_SIZE];
 	_tprintf(_T("-------------------------------------------\n"));
 	_tprintf(_T("Type \"help\" to list available commands.\n"));
@@ -258,6 +378,8 @@ void CmdLoop() {
 			Help();
 		else if (_tcscmp(cmd, _T("start")) == 0)
 			Start();
+		else if (_tcscmp(cmd, _T("newMap")) == 0)
+			NewMap(gameSettings, block);
 		else if (_tcscmp(cmd, _T("showTop10")) == 0)
 		{
 
@@ -265,20 +387,33 @@ void CmdLoop() {
 	} while (_tcscmp(cmd, _T("exit")) != 0);
 }
 
+//Dynamic Memory Management
+VOID DeallocDynamicMemory(_ball** ball, _block** block, _client** player) {
+	free((*ball));
+	free((*block));
+	free((*player));
+}
+VOID CleanUp(_ball** ball, _block** block, _client** player) {
+	CloseSharedInfoHandles();
+	DeallocDynamicMemory(ball, block, player);
+}
+
 //Main
-int _tmain(int argc, const _TCHAR* argv[]) {
+INT _tmain(INT argc, const _TCHAR* argv[]) {
 	if (argc == 2) {
 		//Game vars
 		_gameSettings gameSettings;
-		_ball* ball;
-		_client* players;
-		_client* spectators;
+		_ball* ball = NULL;
+		_block* block = NULL;
+		_client* player = NULL;
+		INT spectators = 0;
+
 		HKEY topTenKey;
 		_tprintf(_T("Arkanoid server:\nExecutable location: %s\n-------------------------------------------\nInitializing...\n"), argv[0]);
-		if (Initialize(argv[1], &gameSettings, &ball, &players, &spectators, &topTenKey)) {
+		if (Initialize(argv[1], &gameSettings, &ball, &block, &player, &topTenKey)) {
 			_tprintf(_T("Done!\n"));
-			CmdLoop();
-			CloseSharedInfoHandles();
+			CmdLoop(&gameSettings, &block);
+			CleanUp(&ball, &block, &player);
 		}
 		else {
 			_tprintf(_T("-------------------------------------------\nPress ENTER to exit."));
