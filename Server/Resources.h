@@ -2,22 +2,26 @@
 //Server Constants------------------------
 #define CMD_SIZE 128
 #define MAPPED_FILE_NAME _T("../Server/SharedInfo.txt")
+#define USERNAME_MAX_LENGHT 64	//64 characters, including '\0'
 //RECTANGLE-------------------------------
 struct rect_STRUCT {
-	int width,
+	INT width,
 		height;
 } typedef _rect;
 
 //COORDINATES-----------------------------
 struct coordinates_STRUCT {
-	int x,
+	INT x,
 		y;
 } typedef _coordinates;
 
 //GAME SETTINGS---------------------------
 struct gameSettings_STRUCT {
-	int maxPlayers,
+	//Configuraveis em "Defaults.txt"
+	INT maxPlayers,
+		maxSpectators,
 		maxBalls,
+		maxPerks,
 		defaultBallSpeed,
 		defaultBallSize,
 		levels,
@@ -27,7 +31,11 @@ struct gameSettings_STRUCT {
 		speedUpChance,
 		slowDownChance,
 		lives;
-	_rect dimensions;
+	_rect dimensions,
+		blockDimensions;
+	//Não configuráveis em "Defaults.txt"
+	BOOL hasStarted;	//Default sempre 0
+	INT totalBlocks;	//Depende de quantos blocos são gerados
 } typedef _gameSettings;
 
 //BALL------------------------------------
@@ -40,7 +48,7 @@ enum ballDirection_ENUM {
 struct ball_STRUCT {
 	_ballDirection direction;
 	_coordinates coordinates;
-	int size,
+	INT size,
 		speed;
 	BOOL isActive;
 } typedef _ball;
@@ -48,7 +56,7 @@ struct ball_STRUCT {
 //BASE------------------------------------
 struct base_STRUCT {
 	_coordinates coordinates;
-	int size,
+	INT size,
 		speed;
 } typedef _base;
 
@@ -61,7 +69,6 @@ enum blockType_ENUM {
 struct block_STRUCT {
 	_blockType type;
 	_coordinates coordinates;
-	_rect dimensions;
 } typedef _block;
 
 //PERK------------------------------------
@@ -75,6 +82,12 @@ enum perkType_ENUM {
 struct perk_STRUCT {
 	_perkType type;
 	_coordinates coordinates;
-	int size,
+	INT size,
 		speed;
 } typedef _perk;
+
+//CLIENT----------------------------------
+struct client_STRUCT {
+	INT id, score;
+	TCHAR username[USERNAME_MAX_LENGHT];
+} typedef _client;

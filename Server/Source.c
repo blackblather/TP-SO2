@@ -62,7 +62,41 @@ VOID CloseSharedInfoHandles() {
 	CloseHandle(hFileMapping);
 	//CloseHandle(hFile);
 }
-VOID WriteToDataFileView(INT type, LPVOID val, INT offset, INT maxBlocks, INT maxBalls) {
+VOID WriteAllToDataFileView(_gameSettings gameSettings, _block* block, _ball* ball) {
+	/*Write order:
+	 * client offset(para usar na meta 2 em View of file - Messages)
+	 * game settings
+	 * blocks
+	 * balls
+	 * perks
+	 * bases
+	 * clients
+	*/
+	dataIterator = dataStart;
+	*((INT*)dataIterator) = 0;
+	dataIterator = (INT*)dataIterator + 1;
+
+	*((_gameSettings*)dataIterator) = gameSettings;
+	dataIterator = (_gameSettings*)dataIterator + 1;
+
+	for (INT i = 0; i < gameSettings.totalBlocks; i++) {
+		*((_block*)dataIterator) = block[i];
+		dataIterator = (_block*)dataIterator + 1;
+	}
+
+	for (INT i = 0; i < gameSettings.maxBalls; i++) {
+		*((_ball*)dataIterator) = ball[i];
+		dataIterator = (_ball*)dataIterator + 1;
+	}
+
+	/*TO DO
+	for (INT i = 0; i < gameSettings.maxPerks; i++) {
+		*((_perk*)dataIterator) = perk[i];
+		dataIterator = (_perk*)dataIterator + 1;
+	}*/
+
+}
+VOID WriteToDataFileView(INT type, LPVOID val, INT offset, _gameSettings gameSettings) {
 	dataIterator = dataStart;
 	switch (type) {
 		case 0: *((INT*)dataIterator) = *((INT*)val); break;	//Client_offset	(SEMAPHORE/MUTEX HERE)
@@ -73,47 +107,33 @@ VOID WriteToDataFileView(INT type, LPVOID val, INT offset, INT maxBlocks, INT ma
 		case 2: {
 			dataIterator = (INT*)dataIterator + 1;
 			dataIterator = (_gameSettings*)dataIterator + 1;
-			if (offset == -1) {		//Escreve todos os blocos
-				for (INT i = 0; i < maxBlocks; i++) {
-					*((_block*)dataIterator) = *((_block*)val);
-					dataIterator = (_block*)dataIterator + 1;
-				}
-			}
-			else if (offset >= 0) {	//Escreve só um bloco
-				dataIterator = (_block*)dataIterator + offset;
-				*((_block*)dataIterator) = *((_block*)val);
-			}
+			dataIterator = (_block*)dataIterator + offset;
+			*((_block*)dataIterator) = *((_block*)val);
 			
 		} break;
 		case 3: {
 			dataIterator = (INT*)dataIterator + 1;
 			dataIterator = (_gameSettings*)dataIterator + 1;
-			dataIterator = (_block*)dataIterator + maxBlocks;
-			if (offset == -1) {		//Escreve todos as bolas
-				for (INT i = 0; i < maxBalls; i++) {
-					*((_ball*)dataIterator) = *((_ball*)val);
-					dataIterator = (_ball*)dataIterator + 1;
-				}
-			}
-			else if (offset >= 0) {	//Escreve só uma bola
-				dataIterator = (_ball*)dataIterator + offset;
-				*((_ball*)dataIterator) = *((_ball*)val);
-			}
+			dataIterator = (_block*)dataIterator + gameSettings.totalBlocks;
+			dataIterator = (_ball*)dataIterator + offset;
+			*((_ball*)dataIterator) = *((_ball*)val);
 		} break;
+		/* TO DO
 		case 4: {
 			dataIterator = (INT*)dataIterator + 1;
 			dataIterator = (_gameSettings*)dataIterator + 1;
-			dataIterator = (_block*)dataIterator + maxBlocks;
-			dataIterator = (_ball*)dataIterator + maxBalls;
+			dataIterator = (_block*)dataIterator + gameSettings.totalBlocks;
+			dataIterator = (_ball*)dataIterator + gameSettings.maxBalls;
 			*((_perk*)dataStart) = *((_perk*)val);
 		} break;
 		case 5: *((_base*)dataStart) = *((_base*)val); break;
-		case 6: *((_client*)dataStart) = *((_client*)val); break;
+		case 6: *((_client*)dataStart) = *((_client*)val); break;*/
 	}
 }
 
 //Threads -> Ball
 DWORD WINAPI ThreadBall(LPVOID lpParameter) {
+	//TO DO
 }
 
 //Threads -> Initializations
@@ -205,21 +225,19 @@ BOOL GenerateMap(UINT seed, _gameSettings* gameSettings, _block** block) {
 //Game -> Initializations
 BOOL InitializeEmptyTopTen(PHKEY topTenKey) {
 	//NEW REGISTRY KEY	(initizlizes all positions to -1)
-	INT defaultValue = 0;		//8bit value -> range [0, 255]
+	INT defaultValue = 0;
 	_TCHAR name[] = "1";
 	LSTATUS valueStatus;
 	for (int i = 0; i < 9; i++) {
-		if ((valueStatus = RegSetValueEx(*topTenKey, name, 0, REG_DWORD, &defaultValue, sizeof(defaultValue))) == ERROR_SUCCESS)	//inicializa as primeiras 9 posições
+		if ((valueStatus = RegSetValueEx(*topTenKey, name, 0, REG_DWORD, &defaultValue, sizeof(INT))) == ERROR_SUCCESS)	//inicializa as primeiras 9 posições
 			name[0]++;
 		else {
 			_tprintf(_T("ERROR INITIALIZING VALUE NAMED: %s\nError code: %ld\n"), name, valueStatus);
 			return FALSE;
 		}
 	}
- 	if ((valueStatus = RegSetValueEx(*topTenKey, "10", 0, REG_DWORD, &defaultValue, sizeof(defaultValue))) == ERROR_SUCCESS)		//inicializa 10ª posição
-		name[0]++;
-	else {
-		_tprintf(_T("ERROR INITIALIZING VALUE NAMED: %s\nError code: %ld\n"), name, valueStatus);
+ 	if ((valueStatus = RegSetValueEx(*topTenKey, "10", 0, REG_DWORD, &defaultValue, sizeof(INT))) != ERROR_SUCCESS)	{	//inicializa 10ª posição
+		_tprintf(_T("ERROR INITIALIZING VALUE: 10\nError code: %ld\n"), valueStatus);
 		return FALSE;
 	}
 	return TRUE;
@@ -349,7 +367,7 @@ VOID Help() {
 	_tprintf(_T("Available commands: \n"));
 	_tprintf(_T("start -> Starts the game for connected clients.\n"));
 	_tprintf(_T("newMap -> Generates a new map if the game hasn't started yet.\n"));
-	_tprintf(_T("showTop10 -> Lists top 10 scores.\n"));
+	_tprintf(_T("top10 -> Lists top 10 scores.\n"));
 	_tprintf(_T("exit -> Orderly closes the server.\n"));
 }
 VOID Start() {
@@ -364,9 +382,30 @@ VOID NewMap(_gameSettings* gameSettings, _block** block) {
 		_tprintf(_T("Successfully generated new map\n"));
 }
 VOID ShowTop10(PHKEY topTenKey) {
-
+	INT data;		
+	_TCHAR name[] = "1";
+	LSTATUS valueStatus;
+	DWORD pdwType;
+	DWORD pcbData;
+	_tprintf(_T("Top 10:\n"));
+	for (int i = 0; i < 9; i++) {
+		if ((valueStatus = RegGetValueA(*topTenKey, NULL, name, RRF_RT_REG_DWORD, &pdwType, &data, &pcbData)) == ERROR_SUCCESS) {	//inicializa as primeiras 9 posições
+			_tprintf(_T(" #%d: %d\n"), i+1, data);
+			name[0]++;
+		}
+		else {
+			_tprintf(_T("ERROR GETTING VALUE: %s\nError code: %ld\n"), name, valueStatus);
+			return FALSE;
+		}
+	}
+	if ((valueStatus = RegGetValueA(*topTenKey, NULL, "10", RRF_RT_REG_DWORD, &pdwType, &data, &pcbData)) == ERROR_SUCCESS)	//inicializa as primeiras 9 posições
+		_tprintf(_T(" #%d: %d\n"), 10, data);
+	else {
+		_tprintf(_T("ERROR GETTING VALUE: 10\nError code: %ld\n"), name, valueStatus);
+		return FALSE;
+	}
 }
-VOID CmdLoop(_gameSettings* gameSettings, _block** block) {
+VOID CmdLoop(_gameSettings* gameSettings, _block** block, PHKEY topTenKey) {
 	_TCHAR cmd[CMD_SIZE];
 	_tprintf(_T("-------------------------------------------\n"));
 	_tprintf(_T("Type \"help\" to list available commands.\n"));
@@ -380,10 +419,8 @@ VOID CmdLoop(_gameSettings* gameSettings, _block** block) {
 			Start();
 		else if (_tcscmp(cmd, _T("newMap")) == 0)
 			NewMap(gameSettings, block);
-		else if (_tcscmp(cmd, _T("showTop10")) == 0)
-		{
-
-		}
+		else if (_tcscmp(cmd, _T("top10")) == 0)
+			ShowTop10(topTenKey);
 	} while (_tcscmp(cmd, _T("exit")) != 0);
 }
 
@@ -412,7 +449,7 @@ INT _tmain(INT argc, const _TCHAR* argv[]) {
 		_tprintf(_T("Arkanoid server:\nExecutable location: %s\n-------------------------------------------\nInitializing...\n"), argv[0]);
 		if (Initialize(argv[1], &gameSettings, &ball, &block, &player, &topTenKey)) {
 			_tprintf(_T("Done!\n"));
-			CmdLoop(&gameSettings, &block);
+			CmdLoop(&gameSettings, &block, &topTenKey);
 			CleanUp(&ball, &block, &player);
 		}
 		else {
