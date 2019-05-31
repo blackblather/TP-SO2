@@ -7,8 +7,8 @@
 //File mapping vars
 HANDLE hFileMapping;
 HANDLE hThreadBall;
-LPVOID dataStart, dataIterator, messageStart, messageIterator;
-
+LPVOID messageStart, messageIterator;
+_gameData* gameDataStart;
 
 //File Mapping
 LPVOID LoadFileView(int offset, int size) {
@@ -20,120 +20,39 @@ LPVOID LoadFileView(int offset, int size) {
 		size);
 }
 BOOL LoadSharedInfo() {
-	//SRC #1: https://docs.microsoft.com/pt-pt/windows/desktop/api/fileapi/nf-fileapi-createfilea
-	/*hFile = CreateFile(MAPPED_FILE_NAME,		//File name
-		GENERIC_READ | GENERIC_WRITE,			//Access
-		FILE_SHARE_READ | FILE_SHARE_WRITE,		//Share mode
-		NULL,									//Security attributes
-		OPEN_EXISTING,							//Creation disposition
-		FILE_ATTRIBUTE_NORMAL,					//Flags and attributes
-		NULL);									//Template File (not used)
-	if (hFile != INVALID_HANDLE_VALUE) {*/
-		SYSTEM_INFO sysInfo;
-		GetSystemInfo(&sysInfo);
-		//_tprintf(_T("Successfully opened file: %s\n"), MAPPED_FILE_NAME);
-		//SRC #2: https://docs.microsoft.com/en-us/windows/desktop/api/WinBase/nf-winbase-createfilemappinga
-		hFileMapping = CreateFileMapping(INVALID_HANDLE_VALUE,
-			NULL,
-			PAGE_READWRITE,
-			0,									//Size in bytes	(high-order)
-			sysInfo.dwAllocationGranularity*2,							//Size in bytes (low-order)
-			_T("LocalSharedInfo"));
+	SYSTEM_INFO sysInfo;
+	GetSystemInfo(&sysInfo);
+	//SRC #2: https://docs.microsoft.com/en-us/windows/desktop/api/WinBase/nf-winbase-createfilemappinga
+	hFileMapping = CreateFileMapping(INVALID_HANDLE_VALUE,
+		NULL,
+		PAGE_READWRITE,
+		0,									//Size in bytes	(high-order)
+		sysInfo.dwAllocationGranularity*2,							//Size in bytes (low-order)
+		_T("LocalSharedInfo"));
 		
-		if (hFileMapping != NULL) {
-			_tprintf(_T("Successfully mapped file in memory\n"));
-			if ((dataStart = LoadFileView(0, sysInfo.dwAllocationGranularity)) != NULL && (messageStart = LoadFileView(sysInfo.dwAllocationGranularity, sysInfo.dwAllocationGranularity)) != NULL) {
-				_tprintf(_T("Successfully created file views\n"));
-				dataIterator = dataStart;
-				messageIterator = messageStart;
-				return TRUE;
-			} else
-				_tprintf(_T("ERROR CREATING FILE VIEWS.\n"));
+	if (hFileMapping != NULL) {
+		_tprintf(_T("Successfully mapped file in memory\n"));
+		if ((gameDataStart = (_gameData*) LoadFileView(0, sysInfo.dwAllocationGranularity)) != NULL && (messageStart = LoadFileView(sysInfo.dwAllocationGranularity, sysInfo.dwAllocationGranularity)) != NULL) {
+			_tprintf(_T("Successfully created file views\n"));
+			messageIterator = messageStart;
+			return TRUE;
 		} else
-			_tprintf(_T("ERROR MAPPING FILE.\n"));
-	/*} else
-		_tprintf(_T("ERROR OPENING FILE: %s\n"), MAPPED_FILE_NAME);*/
+			_tprintf(_T("ERROR CREATING FILE VIEWS.\n"));
+	} else
+		_tprintf(_T("ERROR MAPPING FILE.\n"));
 	_tprintf(_T("Error code: 0x%x\n"), GetLastError());
 	return FALSE;
 }
 VOID CloseSharedInfoHandles() {
 	UnmapViewOfFile(messageStart);
-	UnmapViewOfFile(dataStart);
+	UnmapViewOfFile((LPVOID)gameDataStart);
 	CloseHandle(hFileMapping);
-	//CloseHandle(hFile);
-}
-VOID WriteAllToDataFileView(_gameSettings gameSettings, _block* block, _ball* ball) {
-	/*Write order:
-	 * client offset(para usar na meta 2 em View of file - Messages)
-	 * game settings
-	 * blocks
-	 * balls
-	 * perks
-	 * bases
-	 * clients
-	*/
-	dataIterator = dataStart;
-	*((INT*)dataIterator) = 0;
-	dataIterator = (INT*)dataIterator + 1;
-
-	*((_gameSettings*)dataIterator) = gameSettings;
-	dataIterator = (_gameSettings*)dataIterator + 1;
-
-	for (INT i = 0; i < gameSettings.totalBlocks; i++) {
-		*((_block*)dataIterator) = block[i];
-		dataIterator = (_block*)dataIterator + 1;
-	}
-
-	for (INT i = 0; i < gameSettings.maxBalls; i++) {
-		*((_ball*)dataIterator) = ball[i];
-		dataIterator = (_ball*)dataIterator + 1;
-	}
-
-	/*TO DO
-	for (INT i = 0; i < gameSettings.maxPerks; i++) {
-		*((_perk*)dataIterator) = perk[i];
-		dataIterator = (_perk*)dataIterator + 1;
-	}*/
-
-}
-VOID WriteToDataFileView(INT type, LPVOID val, INT offset, _gameSettings gameSettings) {
-	dataIterator = dataStart;
-	switch (type) {
-		case 0: *((INT*)dataIterator) = *((INT*)val); break;	//Client_offset	(SEMAPHORE/MUTEX HERE)
-		case 1: {
-			dataIterator = (INT*)dataIterator + 1;
-			*((_gameSettings*)dataIterator) = *((_gameSettings*)val);
-		} break;
-		case 2: {
-			dataIterator = (INT*)dataIterator + 1;
-			dataIterator = (_gameSettings*)dataIterator + 1;
-			dataIterator = (_block*)dataIterator + offset;
-			*((_block*)dataIterator) = *((_block*)val);
-			
-		} break;
-		case 3: {
-			dataIterator = (INT*)dataIterator + 1;
-			dataIterator = (_gameSettings*)dataIterator + 1;
-			dataIterator = (_block*)dataIterator + gameSettings.totalBlocks;
-			dataIterator = (_ball*)dataIterator + offset;
-			*((_ball*)dataIterator) = *((_ball*)val);
-		} break;
-		/* TO DO
-		case 4: {
-			dataIterator = (INT*)dataIterator + 1;
-			dataIterator = (_gameSettings*)dataIterator + 1;
-			dataIterator = (_block*)dataIterator + gameSettings.totalBlocks;
-			dataIterator = (_ball*)dataIterator + gameSettings.maxBalls;
-			*((_perk*)dataStart) = *((_perk*)val);
-		} break;
-		case 5: *((_base*)dataStart) = *((_base*)val); break;
-		case 6: *((_client*)dataStart) = *((_client*)val); break;*/
-	}
 }
 
 //Threads -> Ball
 DWORD WINAPI ThreadBall(LPVOID lpParameter) {
 	//TO DO
+	return 1;
 }
 
 //Threads -> Initializations
@@ -170,21 +89,21 @@ INT GetActiveBalls(_ball* ball, INT maxBalls) {
 }
 
 //Game -> Blocks
-VOID InitBlocksrray(_block* block, INT size) {
+VOID InitBlocksrray(INT size) {
+	//TODO: ADD SYNC MECHANISM HERE (gameDataStart is used in main thread (to generate new maps) and in the ball thread (to destroy blocks))
 	for (INT i = 0; i < size; i++) {
-		block[i].coordinates.x = -1;
-		block[i].coordinates.y = -1;
-		block[i].type = normal;
+		gameDataStart->block[i].coordinates.x = -1;
+		gameDataStart->block[i].coordinates.y = -1;
+		gameDataStart->block[i].type = normal;
 	}
 }
-BOOL BlockIsInPos(INT x, INT y, _block* block, INT size) {
-	for (INT i = 0; i < size; i++) {
-		if (block[i].coordinates.x == x && block[i].coordinates.y == y)
+BOOL BlockIsInPos(INT x, INT y, INT size) {
+	for (INT i = 0; i < size; i++)
+		if (gameDataStart->block[i].coordinates.x == x && gameDataStart->block[i].coordinates.y == y)
 			return TRUE;
-	}
 	return FALSE;
 }
-BOOL GenerateMap(UINT seed, _gameSettings* gameSettings, _block** block) {
+BOOL GenerateMap(UINT seed, _gameSettings* gameSettings) {
 	//Regras para gerar blocos pseudo-aleatóriamente:
 	// (DONE) - Regra #1: Os blocos só podem aparecer a uma distancia >= (2*ball.size) dos edges do mapa
 	// (DONE) - Regra #2: Os blocos só podem existir em 75% da altura do mapa, a contar de cima para baixo
@@ -198,28 +117,22 @@ BOOL GenerateMap(UINT seed, _gameSettings* gameSettings, _block** block) {
 		usableHeight = (INT)((gameSettings->dimensions.height - borderPadding * 2)*0.75),
 		maxBlocksPerLine = (INT)(usableWidth / gameSettings->blockDimensions.width),
 		maxBlockLines = (INT)(usableHeight / gameSettings->blockDimensions.height),
-		maxBlocks = maxBlocksPerLine * maxBlockLines,
 		posX,
-		posY;
+		posY,
+		totalBlocks;
 
-	gameSettings->totalBlocks = ((INT)(maxBlocks*0.5)) + (rand() % ((INT)(maxBlocks*0.3)));	//No minimo, 50% dos espaço disponivel para os blocos (75% da area de jogo), é garantido estar ocupado. No máximo, 80% está ocupado
-	(*block) = (_block*)malloc(gameSettings->totalBlocks * sizeof(_block));
-	if ((*block) == NULL) {
-		_tprintf(_T("ERROR LOADING BLOCKS ARRAY\n"));
-		return FALSE;
+	totalBlocks = MIN_BLOCKS + (rand() % (MAX_BLOCKS-MIN_BLOCKS+1));	//Random value between [MIN_BLOCKS, MAX_BLOCKS]
+	
+	InitBlocksrray(totalBlocks);
+	for (INT i = 0; i < totalBlocks; i++) {
+		do {
+			posX = borderPadding + ((rand() % maxBlocksPerLine) * gameSettings->blockDimensions.width);
+			posY = borderPadding + ((rand() % maxBlockLines) * gameSettings->blockDimensions.height);
+		} while (BlockIsInPos(posX, posY, i));	//Aqui uso "i" em vez do tamanho do array, porque nao vale a pena verificar espaços vazios do array
+		gameDataStart->block[i].coordinates.x = posX;
+		gameDataStart->block[i].coordinates.y = posY;
 	}
-	else {
-		InitBlocksrray((*block), gameSettings->totalBlocks);
-		for (INT i = 0; i < gameSettings->totalBlocks; i++) {
-			do {
-				posX = borderPadding + ((rand() % maxBlocksPerLine) * gameSettings->blockDimensions.width);
-				posY = borderPadding + ((rand() % maxBlockLines) * gameSettings->blockDimensions.height);
-			} while (BlockIsInPos(posX, posY, (*block), i));	//Aqui uso "i" em vez do tamanho do array, porque nao vale a pena verificar espaços vazios do array
-			(*block)[i].coordinates.x = posX;
-			(*block)[i].coordinates.y = posY;
-		}
-		return TRUE;
-	}
+	return TRUE;
 }
 
 //Game -> Initializations
@@ -299,7 +212,7 @@ BOOL LoadClientsArray(_client** player, INT maxClients) {
 		return TRUE;
 	}
 }
-BOOL LoadGameSettings(_TCHAR* fileName, _gameSettings* gameSettings) {
+BOOL LoadGameSettings(const _TCHAR* fileName, _gameSettings* gameSettings) {
 	FILE *fp;
 	if (_tfopen_s(&fp, fileName, _T("r")) == 0) {
 		_tprintf(_T("Successfully opened file: %s\n"), fileName);
@@ -349,11 +262,11 @@ BOOL LoadGameSettings(_TCHAR* fileName, _gameSettings* gameSettings) {
 		_tprintf(_T("ERROR OPENING FILE: %s\n"), fileName);
 	return FALSE;
 }
-BOOL Initialize(_TCHAR* defaultsFileName, _gameSettings* gameSettings, _ball** ball, _block** block, _client** player, PHKEY topTenKey) {
+BOOL Initialize(const _TCHAR* defaultsFileName, _gameSettings* gameSettings, _ball** ball, _client** player, PHKEY topTenKey) {
 	if (LoadSharedInfo() &&
 		LoadGameSettings(defaultsFileName, gameSettings) &&
 		LoadBallsArray(ball, gameSettings->maxBalls, gameSettings->defaultBallSpeed, gameSettings->defaultBallSize, gameSettings->dimensions.width, gameSettings->dimensions.height) &&
-		GenerateMap(time(0), gameSettings, block) &&
+		GenerateMap(time(0), gameSettings) &&
 		LoadClientsArray(player, gameSettings->maxPlayers) &&
 		LoadTopTen(topTenKey) &&
 		InitThreads())
@@ -376,9 +289,8 @@ VOID Start() {
 	else
 		_tprintf(_T("Error starting game.\nError code: 0x%x\n"), GetLastError());
 }
-VOID NewMap(_gameSettings* gameSettings, _block** block) {
-	free((*block));
-	if(GenerateMap(time(0), gameSettings, block))
+VOID NewMap(_gameSettings* gameSettings) {
+	if(GenerateMap(time(0), gameSettings))
 		_tprintf(_T("Successfully generated new map\n"));
 }
 VOID ShowTop10(PHKEY topTenKey) {
@@ -395,17 +307,15 @@ VOID ShowTop10(PHKEY topTenKey) {
 		}
 		else {
 			_tprintf(_T("ERROR GETTING VALUE: %s\nError code: %ld\n"), name, valueStatus);
-			return FALSE;
+			return;
 		}
 	}
-	if ((valueStatus = RegGetValueA(*topTenKey, NULL, "10", RRF_RT_REG_DWORD, &pdwType, &data, &pcbData)) == ERROR_SUCCESS)	//inicializa as primeiras 9 posições
+	if ((valueStatus = RegGetValueA(*topTenKey, NULL, "10", RRF_RT_REG_DWORD, &pdwType, &data, &pcbData)) == ERROR_SUCCESS)	//inicializa a 10ª posição
 		_tprintf(_T(" #%d: %d\n"), 10, data);
-	else {
-		_tprintf(_T("ERROR GETTING VALUE: 10\nError code: %ld\n"), name, valueStatus);
-		return FALSE;
-	}
+	else
+		_tprintf(_T("ERROR GETTING VALUE: 10\nError code: %ld\n"), valueStatus);
 }
-VOID CmdLoop(_gameSettings* gameSettings, _block** block, PHKEY topTenKey) {
+VOID CmdLoop(_gameSettings* gameSettings, PHKEY topTenKey) {
 	_TCHAR cmd[CMD_SIZE];
 	_tprintf(_T("-------------------------------------------\n"));
 	_tprintf(_T("Type \"help\" to list available commands.\n"));
@@ -418,21 +328,20 @@ VOID CmdLoop(_gameSettings* gameSettings, _block** block, PHKEY topTenKey) {
 		else if (_tcscmp(cmd, _T("start")) == 0)
 			Start();
 		else if (_tcscmp(cmd, _T("newMap")) == 0)
-			NewMap(gameSettings, block);
+			NewMap(gameSettings);
 		else if (_tcscmp(cmd, _T("top10")) == 0)
 			ShowTop10(topTenKey);
 	} while (_tcscmp(cmd, _T("exit")) != 0);
 }
 
 //Dynamic Memory Management
-VOID DeallocDynamicMemory(_ball** ball, _block** block, _client** player) {
+VOID DeallocDynamicMemory(_ball** ball, _client** player) {
 	free((*ball));
-	free((*block));
 	free((*player));
 }
-VOID CleanUp(_ball** ball, _block** block, _client** player) {
+VOID CleanUp(_ball** ball, _client** player) {
 	CloseSharedInfoHandles();
-	DeallocDynamicMemory(ball, block, player);
+	DeallocDynamicMemory(ball, player);
 }
 
 //Main
@@ -441,16 +350,15 @@ INT _tmain(INT argc, const _TCHAR* argv[]) {
 		//Game vars
 		_gameSettings gameSettings;
 		_ball* ball = NULL;
-		_block* block = NULL;
 		_client* player = NULL;
 		INT spectators = 0;
 
 		HKEY topTenKey;
 		_tprintf(_T("Arkanoid server:\nExecutable location: %s\n-------------------------------------------\nInitializing...\n"), argv[0]);
-		if (Initialize(argv[1], &gameSettings, &ball, &block, &player, &topTenKey)) {
+		if (Initialize(argv[1], &gameSettings, &ball, &player, &topTenKey)) {
 			_tprintf(_T("Done!\n"));
-			CmdLoop(&gameSettings, &block, &topTenKey);
-			CleanUp(&ball, &block, &player);
+			CmdLoop(&gameSettings, &topTenKey);
+			CleanUp(&ball, &player);
 		}
 		else {
 			_tprintf(_T("-------------------------------------------\nPress ENTER to exit."));
