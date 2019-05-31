@@ -3,6 +3,9 @@
 #define CMD_SIZE 128
 #define MAPPED_FILE_NAME _T("../Server/SharedInfo.txt")
 #define USERNAME_MAX_LENGHT 64	//64 characters, including '\0'
+#define MIN_BLOCKS 30	//Arbitrary value (used in map generation)
+#define MAX_BLOCKS 50	//Arbitrary value
+
 //RECTANGLE-------------------------------
 struct rect_STRUCT {
 	INT width,
@@ -33,9 +36,9 @@ struct gameSettings_STRUCT {
 		lives;
 	_rect dimensions,
 		blockDimensions;
+
 	//Não configuráveis em "Defaults.txt"
 	BOOL hasStarted;	//Default sempre 0
-	INT totalBlocks;	//Depende de quantos blocos são gerados
 } typedef _gameSettings;
 
 //BALL------------------------------------
@@ -91,3 +94,8 @@ struct client_STRUCT {
 	INT id, score;
 	TCHAR username[USERNAME_MAX_LENGHT];
 } typedef _client;
+
+//GAMEDATA--------------------------------
+struct gameData_STRUCT {
+	_block block[MAX_BLOCKS];
+} typedef _gameData;
