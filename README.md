@@ -14,5 +14,6 @@ The software uses the following <i>Windows API</i> mechanisms:
   <li>Threads</li>
   <li>Registry</li>
   <li>NamedPipes</li>
+  <li>Mapped files</li>
 </ul>
 For support for both ANSI and UNICODE, the software also uses 	&lt;tchar.h&gt;
