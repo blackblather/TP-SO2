@@ -92,18 +92,26 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 
 			//Create "Play" button
 			CreateWindow(
-				TEXT("BUTTON"),  // Predefined class; Unicode assumed 
-				TEXT("Play"),      // Button text 
-				WS_VISIBLE | WS_CHILD | BS_DEFPUSHBUTTON,  // Styles 
-				50,         // x position 
-				85,         // y position 
-				80,			// Button width
-				25,			// Button height
-				hwnd,		// Parent window
-				1,			// child-window identifier
-				NULL,		// hInstance not needed
-				NULL);      // Pointer not needed
+				TEXT("Button"),								// Predefined class; Unicode assumed 
+				TEXT("Play"),								// Button text 
+				WS_VISIBLE | WS_CHILD | BS_DEFPUSHBUTTON,	// Styles 
+				50,											// x position 
+				85,											// y position 
+				80,											// Button width
+				25,											// Button height
+				hwnd,										// Parent window
+				1,											// child-window identifier
+				NULL,										// hInstance not needed
+				NULL);										// Pointer not needed
 
+			return 0;
+		} break;
+		case WM_COMMAND: {
+			switch (LOWORD(wParam)) {
+				case 1: {
+					MessageBox(hwnd, TEXT("Hmmmm, click me harder daddy"), TEXT("OH YEAAAASSS"), MB_OK);
+				} break;
+			}
 			return 0;
 		} break;
 		case WM_CTLCOLORSTATIC: {
