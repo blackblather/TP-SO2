@@ -14,10 +14,15 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 	WNDCLASS wc;
 	memset(&wc, 0, sizeof(WNDCLASS));
 
+	HCURSOR cursor;
+
 	wc.lpfnWndProc = WindowProc;
 	wc.hInstance = hInstance;
 	wc.lpszClassName = CLASS_NAME;
 	wc.hbrBackground = COLOR_WINDOW + 1;
+	//Source 1: https://docs.microsoft.com/en-us/windows/desktop/menurc/about-cursors
+	//Source 2: https://docs.microsoft.com/en-us/windows/desktop/api/Winuser/nf-winuser-loadcursora
+	wc.hCursor = LoadCursor(NULL, IDC_ARROW);	
 	//wc.hInstance = LoadInstance
 	//wc.hIcon = LoadIcon(hInstance, MAKEINTRESOURCEA(IDI_ICON1));
 	//wc.lpszMenuName = MAKEINTRESOURCEA(IDR_MENU1);
@@ -84,6 +89,20 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 				NULL,
 				NULL,
 				NULL);
+
+			//Create "Play" button
+			CreateWindow(
+				TEXT("BUTTON"),  // Predefined class; Unicode assumed 
+				TEXT("Play"),      // Button text 
+				WS_VISIBLE | WS_CHILD | BS_DEFPUSHBUTTON,  // Styles 
+				50,         // x position 
+				85,         // y position 
+				80,			// Button width
+				25,			// Button height
+				hwnd,		// Parent window
+				1,			// child-window identifier
+				NULL,		// hInstance not needed
+				NULL);      // Pointer not needed
 
 			return 0;
 		} break;
