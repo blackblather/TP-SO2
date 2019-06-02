@@ -1,63 +1,63 @@
-#include <stdio.h>
-#include <windows.h>
-#include <tchar.h>
 #include "dll.h"
 
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 static HBRUSH hbrBkgnd = NULL;
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine, int nCmdShow) {
-	//Source: https://docs.microsoft.com/en-us/windows/desktop/learnwin32/your-first-windows-program
-	// Register the window class.
-	const TCHAR CLASS_NAME[] = TEXT("Sample Window Class");
+	if (!LoadGameFileViews())
+		MessageBox(NULL, TEXT("Error loading game file views.\nExiting..."), TEXT("Fatal error"), MB_OK | MB_ICONERROR);
+	else {
+		//Source: https://docs.microsoft.com/en-us/windows/desktop/learnwin32/your-first-windows-program
+		// Register the window class.
+		const TCHAR CLASS_NAME[] = TEXT("Sample Window Class");
 
-	WNDCLASS wc;
-	memset(&wc, 0, sizeof(WNDCLASS));
+		WNDCLASS wc;
+		memset(&wc, 0, sizeof(WNDCLASS));
+		HCURSOR cursor;
 
-	HCURSOR cursor;
+		wc.lpfnWndProc = WindowProc;
+		wc.hInstance = hInstance;
+		wc.lpszClassName = CLASS_NAME;
+		wc.hbrBackground = COLOR_WINDOW + 1;
+		//Source 1: https://docs.microsoft.com/en-us/windows/desktop/menurc/about-cursors
+		//Source 2: https://docs.microsoft.com/en-us/windows/desktop/api/Winuser/nf-winuser-loadcursora
+		wc.hCursor = LoadCursor(NULL, IDC_ARROW);
+		//wc.hInstance = LoadInstance
+		//wc.hIcon = LoadIcon(hInstance, MAKEINTRESOURCEA(IDI_ICON1));
+		//wc.lpszMenuName = MAKEINTRESOURCEA(IDR_MENU1);
 
-	wc.lpfnWndProc = WindowProc;
-	wc.hInstance = hInstance;
-	wc.lpszClassName = CLASS_NAME;
-	wc.hbrBackground = COLOR_WINDOW + 1;
-	//Source 1: https://docs.microsoft.com/en-us/windows/desktop/menurc/about-cursors
-	//Source 2: https://docs.microsoft.com/en-us/windows/desktop/api/Winuser/nf-winuser-loadcursora
-	wc.hCursor = LoadCursor(NULL, IDC_ARROW);	
-	//wc.hInstance = LoadInstance
-	//wc.hIcon = LoadIcon(hInstance, MAKEINTRESOURCEA(IDI_ICON1));
-	//wc.lpszMenuName = MAKEINTRESOURCEA(IDR_MENU1);
+		RegisterClass(&wc);
 
-	RegisterClass(&wc);
+		// Create the window.
 
-	// Create the window.
+		HWND hwnd = CreateWindowEx(
+			0,								// Optional window styles.
+			CLASS_NAME,						// Window class
+			TEXT("Arkanoid Client v1.0"),   // Window text
+			WS_OVERLAPPEDWINDOW,			// Window style
 
-	HWND hwnd = CreateWindowEx(
-		0,								// Optional window styles.
-		CLASS_NAME,						// Window class
-		TEXT("Arkanoid Client v1.0"),   // Window text
-		WS_OVERLAPPEDWINDOW,			// Window style
+			// Size and position
+			CW_USEDEFAULT, CW_USEDEFAULT, 320, 170,
 
-		// Size and position
-		CW_USEDEFAULT, CW_USEDEFAULT, 320, 170,
+			NULL,       // Parent window    
+			NULL,       // Menu
+			hInstance,  // Instance handle
+			NULL        // Additional application data
+		);
 
-		NULL,       // Parent window    
-		NULL,       // Menu
-		hInstance,  // Instance handle
-		NULL        // Additional application data
-	);
+		if (hwnd == NULL)
+			return 0;
 
-	if (hwnd == NULL)
-		return 0;
+		//Show window
+		ShowWindow(hwnd, nCmdShow);
 
-	//Show window
-	ShowWindow(hwnd, nCmdShow);
-
-	//Init message loop
-	MSG msg;
-	memset(&msg, 0, sizeof(MSG));
-	while (GetMessage(&msg, NULL, 0, 0)) {
-		TranslateMessage(&msg);
-		DispatchMessage(&msg);
+		//Init message loop
+		MSG msg;
+		memset(&msg, 0, sizeof(MSG));
+		while (GetMessage(&msg, NULL, 0, 0)) {
+			TranslateMessage(&msg);
+			DispatchMessage(&msg);
+		}
 	}
 	return 0;
 }
@@ -100,16 +100,23 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 				80,											// Button width
 				25,											// Button height
 				hwnd,										// Parent window
-				1,											// child-window identifier
+				(HMENU)1,											// child-window identifier
 				NULL,										// hInstance not needed
 				NULL);										// Pointer not needed
-
+			
 			return 0;
 		} break;
 		case WM_COMMAND: {
 			switch (LOWORD(wParam)) {
 				case 1: {
-					MessageBox(hwnd, TEXT("Hmmmm, click me harder daddy"), TEXT("OH YEAAAASSS"), MB_OK);
+
+					/*if (MessageBox(hwnd, TEXT("Start waiting for server event?"), TEXT("OH YEAAAASSS"), MB_OK) == IDOK){
+						HANDLE tmpEventHnd = NULL;
+						if ((tmpEventHnd = OpenEvent(SYNCHRONIZE, FALSE, TEXT("ThisEventSuxCokkLol"))) != NULL) {
+							WaitForSingleObject(tmpEventHnd, INFINITE);
+							MessageBox(hwnd, TEXT("EVENT TRIGGERED!!!"), TEXT("I CAME"), MB_OK);
+						}
+					}*/
 				} break;
 			}
 			return 0;
