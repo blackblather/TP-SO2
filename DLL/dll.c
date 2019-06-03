@@ -8,7 +8,8 @@ _gameMsgNewUser* gameMsgNewUser = NULL;
 SYSTEM_INFO sysInfo;
 //(NEW USERS)
 HANDLE hNewUserMutex = NULL;
-HANDLE hNewUserFinishedWritingEvent = NULL;
+HANDLE hNewUserServerEvent = NULL;
+HANDLE hNewUserClientEvent = NULL;
 //------------------------------------------------------
 
 //"private" functions
@@ -51,24 +52,31 @@ BOOL LoadNewUserResources() {
 		_T("newUserMutex") //Mutex name
 	);
 	if (hNewUserMutex != NULL) { //Opened mutex successfuly
-		hNewUserFinishedWritingEvent = OpenEvent(SYNCHRONIZE, //The right to use the object for synchronization
+		hNewUserServerEvent = OpenEvent(SYNCHRONIZE | EVENT_MODIFY_STATE, //The right to use the object for synchronization
 			FALSE, //Child processess do NOT inherit this mutex
-			_T("newUserFinishedWritingEvent") //Mutex name
+			_T("newUserServerEvent") //Event name
 		);
-		if (hNewUserFinishedWritingEvent != NULL)	//Opened event successfuly
-			return TRUE;
+		if (hNewUserServerEvent != NULL) {	//Opened event successfuly
+			hNewUserClientEvent = OpenEvent(SYNCHRONIZE | EVENT_MODIFY_STATE, //The right to use the object for synchronization
+				FALSE, //Child processess do NOT inherit this mutex
+				_T("newUserClientEvent") //Event name
+			);
+			if (hNewUserClientEvent != NULL)	//Opened event successfuly
+				return TRUE;
+		}
 	}
 	return FALSE;
 }
 void SendUsername(TCHAR username[256]) {
 	//Write to mapped file and trigger event
 	_tcscpy_s(gameMsgNewUser->username, 256, username);
-	SetEvent(hNewUserFinishedWritingEvent);
+	SetEvent(hNewUserServerEvent);
 }
 void ReadLoginResponse(BOOL* response) {
 	//wait for event, and get server response
-	WaitForSingleObject(hNewUserFinishedWritingEvent, INFINITE);
+	WaitForSingleObject(hNewUserClientEvent, INFINITE);
 	*response = gameMsgNewUser->response;
+	return;
 }
 //------------------------------------------------------
 
