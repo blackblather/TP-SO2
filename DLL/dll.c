@@ -65,8 +65,10 @@ void SendUsername(TCHAR username[256]) {
 	_tcscpy_s(gameMsgNewUser->username, 256, username);
 	SetEvent(hNewUserFinishedWritingEvent);
 }
-void ReadLoginResponse(BOOL* resp) {
+void ReadLoginResponse(BOOL* response) {
 	//wait for event, and get server response
+	WaitForSingleObject(hNewUserFinishedWritingEvent, INFINITE);
+	*response = gameMsgNewUser->response;
 }
 //------------------------------------------------------
 
@@ -76,10 +78,10 @@ BOOL LoadGameResources() {
 			LoadNewUserResources());
 }
 BOOL LoggedIn(TCHAR username[256]) {
-	BOOL resp = FALSE;
+	BOOL response = FALSE;
 	WaitForSingleObject(hNewUserMutex, INFINITE);
 	SendUsername(username);
-	ReadLoginResponse(&resp);	
+	ReadLoginResponse(&response);
 	ReleaseMutex(hNewUserMutex);
-	return resp;
+	return response;
 }
