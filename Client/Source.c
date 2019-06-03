@@ -62,6 +62,8 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 	return 0;
 }
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+	//Static vars: https://www.geeksforgeeks.org/static-variables-in-c/
+	static HWND hUsernameTxt = NULL;	//static vars in C/C++ preserve their value between function calls
 	switch (uMsg) {
 		case WM_CREATE: {
 			//Create label
@@ -78,7 +80,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 				NULL);
 
 			//Create textbox
-			HWND usernameTxt = CreateWindow(TEXT("Edit"),
+			hUsernameTxt = CreateWindow(TEXT("Edit"),
 				TEXT(""),
 				WS_BORDER | WS_CHILD | WS_VISIBLE,
 				50,
@@ -100,7 +102,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 				80,											// Button width
 				25,											// Button height
 				hwnd,										// Parent window
-				(HMENU)1,											// child-window identifier
+				(HMENU)1,									// child-window identifier
 				NULL,										// hInstance not needed
 				NULL);										// Pointer not needed
 			
@@ -109,14 +111,15 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 		case WM_COMMAND: {
 			switch (LOWORD(wParam)) {
 				case 1: {
-
-					/*if (MessageBox(hwnd, TEXT("Start waiting for server event?"), TEXT("OH YEAAAASSS"), MB_OK) == IDOK){
-						HANDLE tmpEventHnd = NULL;
-						if ((tmpEventHnd = OpenEvent(SYNCHRONIZE, FALSE, TEXT("ThisEventSuxCokkLol"))) != NULL) {
-							WaitForSingleObject(tmpEventHnd, INFINITE);
-							MessageBox(hwnd, TEXT("EVENT TRIGGERED!!!"), TEXT("I CAME"), MB_OK);
-						}
-					}*/
+					TCHAR username[256];
+					GetWindowText(hUsernameTxt, username, 256);
+					/* Esta função (LoggedIn(...)) é bloqueante e não deveria ser chamada na thread que trata da GUI,
+					 * mas parto do principio que o servidor não levará muito tempo a responder,
+					 * pelo que não creio que seja necessário iniciar uma nova thread apenas para chamar a função.*/
+					if(LoggedIn(username))
+						MessageBox(NULL, TEXT("Great success"), TEXT("Great success"), MB_OK | MB_ICONINFORMATION);
+					else
+						MessageBox(NULL, TEXT("Great shit"), TEXT("Great shit"), MB_OK | MB_ICONERROR);
 				} break;
 			}
 			return 0;
