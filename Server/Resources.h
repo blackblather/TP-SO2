@@ -100,3 +100,9 @@ struct client_STRUCT {
 struct gameData_STRUCT {
 	_block block[MAX_BLOCKS];
 } typedef _gameData;
+
+//GAMEMSG - NEW USER----------------------
+struct gameMsgNewUser_STRUCT {
+	TCHAR username[256];
+	BOOL response;
+} typedef _gameMsgNewUser;
