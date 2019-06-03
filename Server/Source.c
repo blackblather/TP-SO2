@@ -9,6 +9,7 @@ HANDLE hFileMapping;
 HANDLE hThreadBall, hThreadNewUsers;
 LPVOID messageStart, messageIterator;
 _gameData* gameDataStart;
+_gameMsgNewUser* gameMsgNewUser;
 
 //File Mapping
 LPVOID LoadFileView(int offset, int size) {
@@ -34,7 +35,9 @@ BOOL LoadSharedInfo() {
 		_tprintf(_T("Successfully mapped file in memory\n"));
 		if ((gameDataStart = (_gameData*) LoadFileView(0, sysInfo.dwAllocationGranularity)) != NULL && (messageStart = LoadFileView(sysInfo.dwAllocationGranularity, sysInfo.dwAllocationGranularity)) != NULL) {
 			_tprintf(_T("Successfully created file views\n"));
-			messageIterator = messageStart;
+			gameMsgNewUser = (_gameMsgNewUser*) messageStart;
+			/*messageStart = (_gameMsgNewUser*)messageStart + 1;
+			messageIterator = messageStart;*/
 			return TRUE;
 		} else
 			_tprintf(_T("ERROR CREATING FILE VIEWS.\n"));
@@ -64,19 +67,28 @@ DWORD WINAPI ThreadNewUsers(LPVOID lpParameter) {
 		_T("newUserMutex"));	//Mutex name
 
 	//Create event object (used by clients/server)
-	HANDLE hNewUserFinishedWritingEvent = CreateEvent(
-		NULL,
+	HANDLE hNewUserServerEvent = CreateEvent(
+		NULL,	//Security attributes
 		FALSE,	//Automatic reset
 		FALSE,	//Inital state = not set
-		_T("newUserFinishedWritingEvent"));
-
-	//Wait for a client to tell the server to process his username
-	WaitForSingleObject(hNewUserFinishedWritingEvent, INFINITE);
-
-	//if(UsernameIsUnique())
-		//AddUserToLoggedInUsersArray();
-	//Respond()
-	//FireEventAgain
+		_T("newUserServerEvent"));
+	//Create event object (used by clients/server)
+	HANDLE hNewUserClientEvent = CreateEvent(
+		NULL,	//Security attributes
+		FALSE,	//Automatic reset
+		FALSE,	//Inital state = not set
+		_T("newUserClientEvent"));
+	while (1) {
+		//Wait for a client to tell the server to process his username
+		WaitForSingleObject(hNewUserServerEvent, INFINITE);
+		//_tprintf(_T("USER DETECTED!\n"));
+		//if(UsernameIsUnique()) {
+			//AddUserToLoggedInUsersArray();
+		_tcscpy_s(gameMsgNewUser->username, 256, TEXT("LOL NEPIA PUTT"));
+		gameMsgNewUser->response = TRUE;	//TODO
+		//}
+		SetEvent(hNewUserClientEvent);
+	}
 	return 1;
 }
 
@@ -182,7 +194,7 @@ BOOL GenerateMap(UINT seed, _gameSettings* gameSettings) {
 BOOL InitializeEmptyTopTen(PHKEY topTenKey) {
 	//NEW REGISTRY KEY	(initizlizes all positions to -1)
 	INT defaultValue = 0;
-	_TCHAR name[] = "1";
+	_TCHAR name[] = _T("1");
 	LSTATUS valueStatus;
 	for (int i = 0; i < 9; i++) {
 		if ((valueStatus = RegSetValueEx(*topTenKey, name, 0, REG_DWORD, &defaultValue, sizeof(INT))) == ERROR_SUCCESS)	//inicializa as primeiras 9 posições
@@ -338,7 +350,7 @@ VOID NewMap(_gameSettings* gameSettings) {
 }
 VOID ShowTop10(PHKEY topTenKey) {
 	INT data;		
-	_TCHAR name[] = "1";
+	_TCHAR name[] = _T("1");
 	LSTATUS valueStatus;
 	DWORD pdwType;
 	DWORD pcbData;
