@@ -33,7 +33,8 @@ struct gameSettings_STRUCT {
 		duration,
 		speedUpChance,
 		slowDownChance,
-		lives;
+		lives,
+		totalBlocks;
 	_rect dimensions,
 		blockDimensions;
 
