@@ -4,7 +4,7 @@
 //(FILE VIEWS)
 HANDLE hFileMapping = NULL;
 _gameData* gameDataStart = NULL;
-LPVOID messageStart = NULL;
+_gameMsgNewUser* gameMsgNewUser = NULL;
 SYSTEM_INFO sysInfo;
 //(NEW USERS)
 HANDLE hNewUserMutex = NULL;
@@ -42,7 +42,7 @@ LPVOID LoadFileView(int offset, int size) {
 BOOL LoadGameMappedFileResources() {
 	return (OpenExistingGameMappedFile() &&
 		(gameDataStart = (_gameData*)LoadFileView(0, sysInfo.dwAllocationGranularity)) != NULL &&
-		(messageStart = LoadFileView(sysInfo.dwAllocationGranularity, sysInfo.dwAllocationGranularity)) != NULL);
+		(gameMsgNewUser = (_gameMsgNewUser*)LoadFileView(sysInfo.dwAllocationGranularity, sysInfo.dwAllocationGranularity)) != NULL);
 }
 //(NEW USER)
 BOOL LoadNewUserResources() {
@@ -60,9 +60,10 @@ BOOL LoadNewUserResources() {
 	}
 	return FALSE;
 }
-void SendUsername(char username[256]) {
+void SendUsername(TCHAR username[256]) {
 	//Write to mapped file and trigger event
-	//
+	_tcscpy_s(gameMsgNewUser->username, 256, username);
+	SetEvent(hNewUserFinishedWritingEvent);
 }
 void ReadLoginResponse(BOOL* resp) {
 	//wait for event, and get server response
@@ -74,7 +75,7 @@ BOOL LoadGameResources() {
 	return (LoadGameMappedFileResources() &&
 			LoadNewUserResources());
 }
-BOOL LoggedIn(char username[256]) {
+BOOL LoggedIn(TCHAR username[256]) {
 	BOOL resp = FALSE;
 	WaitForSingleObject(hNewUserMutex, INFINITE);
 	SendUsername(username);
