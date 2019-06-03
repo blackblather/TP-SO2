@@ -60,6 +60,13 @@ BOOL LoadNewUserResources() {
 	}
 	return FALSE;
 }
+void SendUsername(char username[256]) {
+	//Write to mapped file and trigger event
+	//
+}
+void ReadLoginResponse(BOOL* resp) {
+	//wait for event, and get server response
+}
 //------------------------------------------------------
 
 //"public" functions
@@ -67,10 +74,11 @@ BOOL LoadGameResources() {
 	return (LoadGameMappedFileResources() &&
 			LoadNewUserResources());
 }
-void SendUsername(char username[256]) {
-
-}
-
 BOOL LoggedIn(char username[256]) {
+	BOOL resp = FALSE;
+	WaitForSingleObject(hNewUserMutex, INFINITE);
 	SendUsername(username);
+	ReadLoginResponse(&resp);	
+	ReleaseMutex(hNewUserMutex);
+	return resp;
 }
