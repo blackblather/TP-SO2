@@ -60,7 +60,7 @@ DWORD WINAPI ThreadNewUsers(LPVOID lpParameter) {
 	//Create mutex object (used by clients)
 	HANDLE hNewUserMutex = CreateMutex(
 		NULL,					//Canoot be inherited by child processes
-		TRUE,					//This thread owns the mutex object
+		FALSE,					//The server never "owns" this mutex. It's for the clients to use
 		_T("newUserMutex"));	//Mutex name
 
 	//Create event object (used by clients/server)
