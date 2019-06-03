@@ -4,8 +4,8 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 static HBRUSH hbrBkgnd = NULL;
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine, int nCmdShow) {
-	if (!LoadGameFileViews())
-		MessageBox(NULL, TEXT("Error loading game file views.\nExiting..."), TEXT("Fatal error"), MB_OK | MB_ICONERROR);
+	if (!LoadGameResources())
+		MessageBox(NULL, TEXT("Error loading game resources.\nExiting..."), TEXT("Fatal error"), MB_OK | MB_ICONERROR);
 	else {
 		//Source: https://docs.microsoft.com/en-us/windows/desktop/learnwin32/your-first-windows-program
 		// Register the window class.
