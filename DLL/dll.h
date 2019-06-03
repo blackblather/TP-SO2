@@ -11,6 +11,6 @@
 #endif
 
 //Functions
-DLL_API BOOL LoadGameFileViews();
+DLL_API BOOL LoadGameResources();
 DLL_API void SendUsername(char username[256]);
 DLL_API BOOL LoggedIn(char username[256]);
