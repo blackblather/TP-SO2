@@ -6,7 +6,7 @@
  
 //File mapping vars
 HANDLE hFileMapping;
-HANDLE hThreadBall;
+HANDLE hThreadBall, hThreadNewUsers;
 LPVOID messageStart, messageIterator;
 _gameData* gameDataStart;
 
@@ -27,7 +27,7 @@ BOOL LoadSharedInfo() {
 		NULL,
 		PAGE_READWRITE,
 		0,									//Size in bytes	(high-order)
-		sysInfo.dwAllocationGranularity*2,							//Size in bytes (low-order)
+		sysInfo.dwAllocationGranularity*2,	//Size in bytes (low-order)
 		_T("LocalSharedInfo"));
 		
 	if (hFileMapping != NULL) {
@@ -55,6 +55,31 @@ DWORD WINAPI ThreadBall(LPVOID lpParameter) {
 	return 1;
 }
 
+//Threads -> New Users
+DWORD WINAPI ThreadNewUsers(LPVOID lpParameter) {
+	//Create mutex object (used by clients)
+	HANDLE hNewUserMutex = CreateMutex(
+		NULL,					//Canoot be inherited by child processes
+		TRUE,					//This thread owns the mutex object
+		_T("newUserMutex"));	//Mutex name
+
+	//Create event object (used by clients/server)
+	HANDLE hNewUserFinishedWritingEvent = CreateEvent(
+		NULL,
+		FALSE,	//Automatic reset
+		FALSE,	//Inital state = not set
+		_T("newUserFinishedWritingEvent"));
+
+	//Wait for a client to tell the server to process his username
+	WaitForSingleObject(hNewUserFinishedWritingEvent, INFINITE);
+
+	//if(UsernameIsUnique())
+		//AddUserToLoggedInUsersArray();
+	//Respond()
+	//FireEventAgain
+	return 1;
+}
+
 //Threads -> Initializations
 BOOL InitThreadBall() {
 	hThreadBall = CreateThread(
@@ -67,14 +92,33 @@ BOOL InitThreadBall() {
 	);
 	if (hThreadBall != NULL)
 		return TRUE;
-	_tprintf(_T("ERROR CREATING THREAD: 'hThreadBall'\n"));
+	_tprintf(_T("ERROR CREATING 'ball' THREAD\n"));
+	return FALSE;
+}
+BOOL InitThreadNewUsers() {
+	hThreadNewUsers = CreateThread(
+		NULL,				//hThreadNewUsers cannot be inherited by child processes
+		0,					//Default stack size
+		ThreadNewUsers,		//Function to execute
+		NULL,				//Function param
+		0,					//The thread runs immediately after creation
+		NULL				//Thread ID is not stored anywhere
+	);
+	if (hThreadBall != NULL)
+		return TRUE;
+	_tprintf(_T("ERROR CREATING 'new users' THREAD\n"));
 	return FALSE;
 }
 BOOL InitThreads() {
 	if (InitThreadBall()) {
-		_tprintf(_T("All threads created successfully. [NEED TO INITIALIZE USER THREAD STILL]\n"));
-		return TRUE;
+		_tprintf(_T("Initialized 'ball' thread [SUSPENDED]\n"));
+		if (InitThreadNewUsers()) {
+			_tprintf(_T("Initialized 'new users' thread [RUNNING]\n"));
+			return TRUE;
+		}
 	}
+
+	//Common code if an error occurs
 	_tprintf(_T("Error code: 0x%x\n"), GetLastError());
 	return FALSE;
 }
@@ -118,13 +162,12 @@ BOOL GenerateMap(UINT seed, _gameSettings* gameSettings) {
 		maxBlocksPerLine = (INT)(usableWidth / gameSettings->blockDimensions.width),
 		maxBlockLines = (INT)(usableHeight / gameSettings->blockDimensions.height),
 		posX,
-		posY,
-		totalBlocks;
+		posY;
 
-	totalBlocks = MIN_BLOCKS + (rand() % (MAX_BLOCKS-MIN_BLOCKS+1));	//Random value between [MIN_BLOCKS, MAX_BLOCKS]
+	gameSettings->totalBlocks = MIN_BLOCKS + (rand() % (MAX_BLOCKS-MIN_BLOCKS+1));	//Random value between [MIN_BLOCKS, MAX_BLOCKS]
 	
-	InitBlocksrray(totalBlocks);
-	for (INT i = 0; i < totalBlocks; i++) {
+	InitBlocksrray(MAX_BLOCKS);	//Always intialize ALL blocks, 
+	for (INT i = 0; i < gameSettings->totalBlocks; i++) {
 		do {
 			posX = borderPadding + ((rand() % maxBlocksPerLine) * gameSettings->blockDimensions.width);
 			posY = borderPadding + ((rand() % maxBlockLines) * gameSettings->blockDimensions.height);
