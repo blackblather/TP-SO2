@@ -4,6 +4,14 @@
 #include <Windows.h> 
 #include "Resources.h"
  
+//Client vars
+_client* player = NULL;
+int loggedInPlayers = 0;	//This var exists to avoid looping the player's array everytime to count
+HANDLE hPlayerMutex;		//To use any of the above vars, use this mutex
+
+//Game Settings Mutex
+HANDLE hGameSettingsMutex;
+
 //File mapping vars
 HANDLE hFileMapping;
 HANDLE hThreadBall, hThreadNewUsers;
@@ -59,7 +67,22 @@ DWORD WINAPI ThreadBall(LPVOID lpParameter) {
 }
 
 //Threads -> New Users
+BOOL UsernameIsUnique(TCHAR username[USERNAME_MAX_LENGHT], int maxPlayers) {
+	int strLen = _tcsnlen(gameMsgNewUser->username, USERNAME_MAX_LENGHT);
+	for (int i = 0; i < maxPlayers; i++)
+		if (strLen != 0 && strLen != USERNAME_MAX_LENGHT)
+			if (_tcscmp(player[i].username, gameMsgNewUser->username) == 0)
+				return FALSE;
+	return TRUE;
+}
+void AddUserToLoggedInUsersArray(TCHAR username[USERNAME_MAX_LENGHT]) {
+	_tcscpy_s(player[loggedInPlayers].username, USERNAME_MAX_LENGHT, username);
+	loggedInPlayers++;
+}
 DWORD WINAPI ThreadNewUsers(LPVOID lpParameter) {
+	//Typecast thread param
+	_gameSettings* gameSettings = (_gameSettings*)lpParameter;
+
 	//Create mutex object (used by clients)
 	HANDLE hNewUserMutex = CreateMutex(
 		NULL,					//Canoot be inherited by child processes
@@ -78,15 +101,26 @@ DWORD WINAPI ThreadNewUsers(LPVOID lpParameter) {
 		FALSE,	//Automatic reset
 		FALSE,	//Inital state = not set
 		_T("newUserClientEvent"));
+
 	while (1) {
 		//Wait for a client to tell the server to process his username
 		WaitForSingleObject(hNewUserServerEvent, INFINITE);
-		//_tprintf(_T("USER DETECTED!\n"));
-		//if(UsernameIsUnique()) {
-			//AddUserToLoggedInUsersArray();
-		_tcscpy_s(gameMsgNewUser->username, 256, TEXT("LOL NEPIA PUTT"));
-		gameMsgNewUser->response = TRUE;	//TODO
-		//}
+			//Wait for other threads to be done using player's array and loggedInPlayers var
+			WaitForSingleObject(hPlayerMutex, INFINITE);
+				//Wait for other threads to be done using gameSettings struct
+				//I'm avoiding using WaitForMultipleObjects() to avoid creating an array of mutexes
+				WaitForSingleObject(hGameSettingsMutex, INFINITE);
+					if(UsernameIsUnique(gameMsgNewUser->username, gameSettings->maxPlayers) && loggedInPlayers < gameSettings->maxPlayers) {
+						if(!gameSettings->hasStarted)
+							AddUserToLoggedInUsersArray(gameMsgNewUser->username);
+						else {
+							//AddUserToSpectatorsArray();
+						}
+						gameMsgNewUser->response = TRUE;
+					} else
+						gameMsgNewUser->response = FALSE;
+				ReleaseMutex(hGameSettingsMutex);
+			ReleaseMutex(hPlayerMutex);
 		SetEvent(hNewUserClientEvent);
 	}
 	return 1;
@@ -107,12 +141,12 @@ BOOL InitThreadBall() {
 	_tprintf(_T("ERROR CREATING 'ball' THREAD\n"));
 	return FALSE;
 }
-BOOL InitThreadNewUsers() {
+BOOL InitThreadNewUsers(int* maxPlayers) {
 	hThreadNewUsers = CreateThread(
 		NULL,				//hThreadNewUsers cannot be inherited by child processes
 		0,					//Default stack size
 		ThreadNewUsers,		//Function to execute
-		NULL,				//Function param
+		maxPlayers,			//Function param
 		0,					//The thread runs immediately after creation
 		NULL				//Thread ID is not stored anywhere
 	);
@@ -121,10 +155,10 @@ BOOL InitThreadNewUsers() {
 	_tprintf(_T("ERROR CREATING 'new users' THREAD\n"));
 	return FALSE;
 }
-BOOL InitThreads() {
+BOOL InitThreads(int* maxPlayers) {
 	if (InitThreadBall()) {
 		_tprintf(_T("Initialized 'ball' thread [SUSPENDED]\n"));
-		if (InitThreadNewUsers()) {
+		if (InitThreadNewUsers(maxPlayers)) {
 			_tprintf(_T("Initialized 'new users' thread [RUNNING]\n"));
 			return TRUE;
 		}
@@ -191,6 +225,17 @@ BOOL GenerateMap(UINT seed, _gameSettings* gameSettings) {
 }
 
 //Game -> Initializations
+BOOL InitializeSyncMechanisms() {
+	hPlayerMutex = CreateMutex(
+		NULL,	//Canoot be inherited by child processes
+		FALSE,	//The server doesn't "own" this mutex
+		NULL);	//Nameless mutex
+	hGameSettingsMutex = CreateMutex(
+		NULL,	//Canoot be inherited by child processes
+		FALSE,	//The server doesn't "own" this mutex
+		NULL);	//Nameless mutex
+	return (hPlayerMutex != NULL && hGameSettingsMutex != NULL);
+}
 BOOL InitializeEmptyTopTen(PHKEY topTenKey) {
 	//NEW REGISTRY KEY	(initizlizes all positions to -1)
 	INT defaultValue = 0;
@@ -253,19 +298,17 @@ BOOL LoadBallsArray(_ball** ball, INT maxBalls, INT speed, INT size, INT gameAre
 		return TRUE;
 	}
 }
-BOOL LoadClientsArray(_client** player, INT maxClients) {
-	(*player) = (_client*)malloc(maxClients * sizeof(_client));
-	if ((*player) == NULL) {
+BOOL LoadClientsArray(INT maxClients) {
+	player = (_client*)malloc(maxClients * sizeof(_client));
+	if (player == NULL) {
 		_tprintf(_T("ERROR LOADING CLIENTS ARRAY\n"));
 		return FALSE;
 	}
-	else {
-		for (INT i = 0; i < maxClients; i++) {
-			(*player)->id = -1;
-			memset((*player)->username, 0, USERNAME_MAX_LENGHT);
-		}
-		return TRUE;
+	for (INT i = 0; i < maxClients; i++) {
+		player[i].id = -1;
+		memset(player[i].username, 0, USERNAME_MAX_LENGHT);
 	}
+	return TRUE;
 }
 BOOL LoadGameSettings(const _TCHAR* fileName, _gameSettings* gameSettings) {
 	FILE *fp;
@@ -317,14 +360,15 @@ BOOL LoadGameSettings(const _TCHAR* fileName, _gameSettings* gameSettings) {
 		_tprintf(_T("ERROR OPENING FILE: %s\n"), fileName);
 	return FALSE;
 }
-BOOL Initialize(const _TCHAR* defaultsFileName, _gameSettings* gameSettings, _ball** ball, _client** player, PHKEY topTenKey) {
+BOOL Initialize(const _TCHAR* defaultsFileName, _gameSettings* gameSettings, _ball** ball, PHKEY topTenKey) {
 	if (LoadSharedInfo() &&
 		LoadGameSettings(defaultsFileName, gameSettings) &&
 		LoadBallsArray(ball, gameSettings->maxBalls, gameSettings->defaultBallSpeed, gameSettings->defaultBallSize, gameSettings->dimensions.width, gameSettings->dimensions.height) &&
 		GenerateMap(time(0), gameSettings) &&
-		LoadClientsArray(player, gameSettings->maxPlayers) &&
+		LoadClientsArray(gameSettings->maxPlayers) &&
 		LoadTopTen(topTenKey) &&
-		InitThreads())
+		InitializeSyncMechanisms() &&
+		InitThreads(&gameSettings->maxPlayers))
 		return TRUE;
 	return FALSE;
 }
@@ -390,13 +434,13 @@ VOID CmdLoop(_gameSettings* gameSettings, PHKEY topTenKey) {
 }
 
 //Dynamic Memory Management
-VOID DeallocDynamicMemory(_ball** ball, _client** player) {
+VOID DeallocDynamicMemory(_ball** ball) {
 	free((*ball));
-	free((*player));
+	free(player);
 }
-VOID CleanUp(_ball** ball, _client** player) {
+VOID CleanUp(_ball** ball) {
 	CloseSharedInfoHandles();
-	DeallocDynamicMemory(ball, player);
+	DeallocDynamicMemory(ball);
 }
 
 //Main
@@ -405,15 +449,14 @@ INT _tmain(INT argc, const _TCHAR* argv[]) {
 		//Game vars
 		_gameSettings gameSettings;
 		_ball* ball = NULL;
-		_client* player = NULL;
 		INT spectators = 0;
 
 		HKEY topTenKey;
 		_tprintf(_T("Arkanoid server:\nExecutable location: %s\n-------------------------------------------\nInitializing...\n"), argv[0]);
-		if (Initialize(argv[1], &gameSettings, &ball, &player, &topTenKey)) {
+		if (Initialize(argv[1], &gameSettings, &ball, &topTenKey)) {
 			_tprintf(_T("Done!\n"));
 			CmdLoop(&gameSettings, &topTenKey);
-			CleanUp(&ball, &player);
+			CleanUp(&ball);
 		}
 		else {
 			_tprintf(_T("-------------------------------------------\nPress ENTER to exit."));
