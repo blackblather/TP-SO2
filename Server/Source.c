@@ -141,12 +141,12 @@ BOOL InitThreadBall() {
 	_tprintf(_T("ERROR CREATING 'ball' THREAD\n"));
 	return FALSE;
 }
-BOOL InitThreadNewUsers(_gameSettings* gameSettings) {
+BOOL InitThreadNewUsers(int* maxPlayers) {
 	hThreadNewUsers = CreateThread(
 		NULL,				//hThreadNewUsers cannot be inherited by child processes
 		0,					//Default stack size
 		ThreadNewUsers,		//Function to execute
-		gameSettings,		//Function param
+		maxPlayers,			//Function param
 		0,					//The thread runs immediately after creation
 		NULL				//Thread ID is not stored anywhere
 	);
@@ -155,10 +155,10 @@ BOOL InitThreadNewUsers(_gameSettings* gameSettings) {
 	_tprintf(_T("ERROR CREATING 'new users' THREAD\n"));
 	return FALSE;
 }
-BOOL InitThreads(_gameSettings* gameSettings) {
+BOOL InitThreads(int* maxPlayers) {
 	if (InitThreadBall()) {
 		_tprintf(_T("Initialized 'ball' thread [SUSPENDED]\n"));
-		if (InitThreadNewUsers(gameSettings)) {
+		if (InitThreadNewUsers(maxPlayers)) {
 			_tprintf(_T("Initialized 'new users' thread [RUNNING]\n"));
 			return TRUE;
 		}
@@ -368,7 +368,7 @@ BOOL Initialize(const _TCHAR* defaultsFileName, _gameSettings* gameSettings, _ba
 		LoadClientsArray(gameSettings->maxPlayers) &&
 		LoadTopTen(topTenKey) &&
 		InitializeSyncMechanisms() &&
-		InitThreads(gameSettings))
+		InitThreads(&gameSettings->maxPlayers))
 		return TRUE;
 	return FALSE;
 }

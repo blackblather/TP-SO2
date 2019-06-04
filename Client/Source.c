@@ -111,8 +111,8 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 		case WM_COMMAND: {
 			switch (LOWORD(wParam)) {
 				case 1: {
-					TCHAR username[USERNAME_MAX_LENGHT];
-					GetWindowText(hUsernameTxt, username, USERNAME_MAX_LENGHT);
+					TCHAR username[256];
+					GetWindowText(hUsernameTxt, username, 256);
 					/* Esta função (LoggedIn(...)) é bloqueante e não deveria ser chamada na thread que trata da GUI,
 					 * mas parto do principio que o servidor não levará muito tempo a responder,
 					 * pelo que não creio que seja necessário iniciar uma nova thread apenas para chamar a função.*/
