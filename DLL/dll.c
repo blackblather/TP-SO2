@@ -67,9 +67,9 @@ BOOL LoadNewUserResources() {
 	}
 	return FALSE;
 }
-void SendUsername(TCHAR username[256]) {
+void SendUsername(TCHAR username[USERNAME_MAX_LENGHT]) {
 	//Write to mapped file and trigger event
-	_tcscpy_s(gameMsgNewUser->username, 256, username);
+	_tcscpy_s(gameMsgNewUser->username, USERNAME_MAX_LENGHT, username);
 	SetEvent(hNewUserServerEvent);
 }
 void ReadLoginResponse(BOOL* response) {
@@ -85,7 +85,7 @@ BOOL LoadGameResources() {
 	return (LoadGameMappedFileResources() &&
 			LoadNewUserResources());
 }
-BOOL LoggedIn(TCHAR username[256]) {
+BOOL LoggedIn(TCHAR username[USERNAME_MAX_LENGHT]) {
 	BOOL response = FALSE;
 	WaitForSingleObject(hNewUserMutex, INFINITE);
 	SendUsername(username);

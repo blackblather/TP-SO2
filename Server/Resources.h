@@ -2,7 +2,7 @@
 //Server Constants------------------------
 #define CMD_SIZE 128
 #define MAPPED_FILE_NAME _T("../Server/SharedInfo.txt")
-#define USERNAME_MAX_LENGHT 64	//64 characters, including '\0'
+#define USERNAME_MAX_LENGHT 256	//64 characters, including '\0'
 #define MIN_BLOCKS 30	//Arbitrary value (used in map generation)
 #define MAX_BLOCKS 50	//Arbitrary value
 

@@ -12,4 +12,4 @@
 
 //Functions to export
 DLL_API BOOL LoadGameResources();
-DLL_API BOOL LoggedIn(char username[256]);
+DLL_API BOOL LoggedIn(TCHAR username[USERNAME_MAX_LENGHT]);
