@@ -106,3 +106,19 @@ struct gameMsgNewUser_STRUCT {
 	TCHAR username[256];
 	BOOL response;
 } typedef _gameMsgNewUser;
+
+//GAMEMSG - SERVER RESPONSE---------------
+struct serverResponse_STRUCT {
+	RECT baseNew, baseOld;
+	RECT blockNew, blockOld;
+	RECT ballNew, ballOld;
+} typedef _serverResponse;
+
+//GAMEMSG - CLIENT MSG--------------------
+enum movement_ENUM {
+	moveLeft,
+	moveRight
+} typedef _movement;
+struct clientMsg_STRUCT {
+	_movement move;
+} typedef _clientMsg;
