@@ -1,7 +1,10 @@
 #include "dll.h"
 
-LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
+LRESULT CALLBACK LoginWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
+LRESULT CALLBACK GameWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 static HBRUSH hbrBkgnd = NULL;
+const TCHAR LOGIN_CLASS_NAME[] = TEXT("Login Window Class");
+const TCHAR GAME_CLASS_NAME[] = TEXT("Game Window Class");
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine, int nCmdShow) {
 	if (!LoadGameResources())
@@ -9,30 +12,23 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 	else {
 		//Source: https://docs.microsoft.com/en-us/windows/desktop/learnwin32/your-first-windows-program
 		// Register the window class.
-		const TCHAR CLASS_NAME[] = TEXT("Sample Window Class");
+		WNDCLASS lwc;
+		memset(&lwc, 0, sizeof(WNDCLASS));
 
-		WNDCLASS wc;
-		memset(&wc, 0, sizeof(WNDCLASS));
-		HCURSOR cursor;
-
-		wc.lpfnWndProc = WindowProc;
-		wc.hInstance = hInstance;
-		wc.lpszClassName = CLASS_NAME;
-		wc.hbrBackground = COLOR_WINDOW + 1;
+		lwc.lpfnWndProc = LoginWindowProc;
+		lwc.hInstance = hInstance;
+		lwc.lpszClassName = LOGIN_CLASS_NAME;
+		lwc.hbrBackground = COLOR_WINDOW + 1;
 		//Source 1: https://docs.microsoft.com/en-us/windows/desktop/menurc/about-cursors
 		//Source 2: https://docs.microsoft.com/en-us/windows/desktop/api/Winuser/nf-winuser-loadcursora
-		wc.hCursor = LoadCursor(NULL, IDC_ARROW);
-		//wc.hInstance = LoadInstance
-		//wc.hIcon = LoadIcon(hInstance, MAKEINTRESOURCEA(IDI_ICON1));
-		//wc.lpszMenuName = MAKEINTRESOURCEA(IDR_MENU1);
+		lwc.hCursor = LoadCursor(NULL, IDC_ARROW);
 
-		RegisterClass(&wc);
+		RegisterClass(&lwc);
 
-		// Create the window.
-
-		HWND hwnd = CreateWindowEx(
+		// Create the login window.
+		HWND hLoginWnd = CreateWindowEx(
 			0,								// Optional window styles.
-			CLASS_NAME,						// Window class
+			LOGIN_CLASS_NAME,						// Window class
 			TEXT("Arkanoid Client v1.0"),   // Window text
 			WS_OVERLAPPEDWINDOW,			// Window style
 
@@ -45,11 +41,28 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 			NULL        // Additional application data
 		);
 
-		if (hwnd == NULL)
+		//Error checking
+		if (hLoginWnd == NULL)
 			return 0;
 
 		//Show window
-		ShowWindow(hwnd, nCmdShow);
+		ShowWindow(hLoginWnd, nCmdShow);
+		//--------------------------------------------------
+
+		WNDCLASS gwc;
+		memset(&gwc, 0, sizeof(WNDCLASS));
+
+		gwc.lpfnWndProc = GameWindowProc;
+		gwc.hInstance = hInstance;
+		gwc.lpszClassName = GAME_CLASS_NAME;
+		gwc.hbrBackground = COLOR_WINDOW + 1;
+		//Source 1: https://docs.microsoft.com/en-us/windows/desktop/menurc/about-cursors
+		//Source 2: https://docs.microsoft.com/en-us/windows/desktop/api/Winuser/nf-winuser-loadcursora
+		gwc.hCursor = LoadCursor(NULL, IDC_ARROW);
+
+		RegisterClass(&gwc);
+
+		//---------------------------------------------------
 
 		//Init message loop
 		MSG msg;
@@ -61,7 +74,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 	}
 	return 0;
 }
-LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+LRESULT CALLBACK LoginWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
 	//Static vars: https://www.geeksforgeeks.org/static-variables-in-c/
 	static HWND hUsernameTxt = NULL;	//static vars in C/C++ preserve their value between function calls
 	switch (uMsg) {
@@ -116,10 +129,33 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 					/* Esta função (LoggedIn(...)) é bloqueante e não deveria ser chamada na thread que trata da GUI,
 					 * mas parto do principio que o servidor não levará muito tempo a responder,
 					 * pelo que não creio que seja necessário iniciar uma nova thread apenas para chamar a função.*/
-					if(LoggedIn(username))
-						MessageBox(NULL, TEXT("Great success"), TEXT("Great success"), MB_OK | MB_ICONINFORMATION);
+					if (LoggedIn(username)) {
+						//Logged in successfuly. Create amd open game window here
+						ShowWindow(hwnd, SW_HIDE);
+						// Create the game window.
+						HWND hGameWnd = CreateWindowEx(
+							0,								// Optional window styles.
+							GAME_CLASS_NAME,						// Window class
+							TEXT("Arkanoid Client v1.0"),   // Window text
+							WS_OVERLAPPEDWINDOW,			// Window style
+
+							// Size and position
+							CW_USEDEFAULT, CW_USEDEFAULT, 555, 777,
+
+							NULL,       // Parent window    
+							NULL,       // Menu
+							NULL,		// Instance handle
+							NULL        // Additional application data
+						);
+
+						if (hwnd == NULL)
+							return 0;
+
+						//Show window
+						ShowWindow(hGameWnd, SW_SHOW);
+					}
 					else
-						MessageBox(NULL, TEXT("Great shit"), TEXT("Great shit"), MB_OK | MB_ICONERROR);
+						MessageBox(NULL, TEXT("Error logging in, please try again") , TEXT("Error"), MB_OK | MB_ICONERROR);
 				} break;
 			}
 			return 0;
@@ -137,6 +173,23 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 			}
 			return (INT_PTR)hbrBkgnd;
 		}
+		case WM_CLOSE: {
+			if (MessageBox(hwnd, TEXT("Really quit?"), TEXT("My application"), MB_OKCANCEL) == IDOK)
+				DestroyWindow(hwnd);
+			return 0;
+		} break;
+		case WM_DESTROY: {
+			PostQuitMessage(0);
+			return 0;
+		} break;
+		default: {
+			//Performs default action for unhandled messages
+			return DefWindowProc(hwnd, uMsg, wParam, lParam);
+		} break;
+	}
+}
+LRESULT CALLBACK GameWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+	switch (uMsg) {
 		case WM_CLOSE: {
 			if (MessageBox(hwnd, TEXT("Really quit?"), TEXT("My application"), MB_OKCANCEL) == IDOK)
 				DestroyWindow(hwnd);
