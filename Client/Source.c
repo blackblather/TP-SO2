@@ -190,6 +190,10 @@ LRESULT CALLBACK LoginWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 }
 LRESULT CALLBACK GameWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
 	switch (uMsg) {
+		case WM_KEYDOWN: {
+			if (wParam == VK_LEFT || wParam == VK_RIGHT)
+				MessageBox(NULL, TEXT("pressed valid key"), TEXT("CHAR PRESSED"), MB_OK | MB_ICONINFORMATION);
+		} break;
 		case WM_CLOSE: {
 			if (MessageBox(hwnd, TEXT("Really quit?"), TEXT("My application"), MB_OKCANCEL) == IDOK)
 				DestroyWindow(hwnd);
