@@ -15,9 +15,11 @@ HANDLE hGameSettingsMutex;
 //File mapping vars
 HANDLE hFileMapping;
 HANDLE hThreadBall, hThreadNewUsers;
-LPVOID messageStart, messageIterator;
+LPVOID msgFileViewAddr;
 _gameData* gameDataStart;
 _gameMsgNewUser* gameMsgNewUser;
+_serverResponse* serverResp;
+_clientMsg* messageStart, *messageIterator;
 
 //File Mapping
 LPVOID LoadFileView(int offset, int size) {
@@ -41,11 +43,14 @@ BOOL LoadSharedInfo() {
 		
 	if (hFileMapping != NULL) {
 		_tprintf(_T("Successfully mapped file in memory\n"));
-		if ((gameDataStart = (_gameData*) LoadFileView(0, sysInfo.dwAllocationGranularity)) != NULL && (messageStart = LoadFileView(sysInfo.dwAllocationGranularity, sysInfo.dwAllocationGranularity)) != NULL) {
+		if ((gameDataStart = (_gameData*) LoadFileView(0, sysInfo.dwAllocationGranularity)) != NULL && (msgFileViewAddr = LoadFileView(sysInfo.dwAllocationGranularity, sysInfo.dwAllocationGranularity)) != NULL) {
 			_tprintf(_T("Successfully created file views\n"));
-			gameMsgNewUser = (_gameMsgNewUser*) messageStart;
-			/*messageStart = (_gameMsgNewUser*)messageStart + 1;
-			messageIterator = messageStart;*/
+			gameMsgNewUser = (_gameMsgNewUser*)msgFileViewAddr;
+			msgFileViewAddr = (_gameMsgNewUser*)msgFileViewAddr + 1;
+			serverResp = (_serverResponse*)msgFileViewAddr;
+			msgFileViewAddr = (_serverResponse*)msgFileViewAddr + 1;
+			messageStart = msgFileViewAddr;
+			messageIterator = messageStart;
 			return TRUE;
 		} else
 			_tprintf(_T("ERROR CREATING FILE VIEWS.\n"));
