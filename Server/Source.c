@@ -8,12 +8,12 @@
 struct newUsersParam_STRUCT {
 	_gameSettings* gameSettings;
 	_gameMsgNewUser* gameMsgNewUser;
+	_client* player;
+	int* loggedInPlayers;
 } typedef _newUsersParam;
 
 //Client vars
-_client* player = NULL;
-int loggedInPlayers = 0;	//This var exists to avoid looping the player's array everytime to count
-HANDLE hPlayerMutex;		//To use any of the above vars, use this mutex
+HANDLE hPlayerMutex;		//To use player and/or loggedInPlayers, use this mutex
 
 //Game Settings Mutex
 HANDLE hGameSettingsMutex;
@@ -71,17 +71,17 @@ DWORD WINAPI ThreadBall(LPVOID lpParameter) {
 }
 
 //Threads -> New Users
-BOOL UsernameIsUnique(TCHAR username[USERNAME_MAX_LENGHT], int maxPlayers, _gameMsgNewUser gameMsgNewUser) {
-	int strLen = _tcsnlen(gameMsgNewUser.username, USERNAME_MAX_LENGHT);
+BOOL UsernameIsUnique(TCHAR username[USERNAME_MAX_LENGHT], int maxPlayers, _client* player) {
+	int strLen = _tcsnlen(username, USERNAME_MAX_LENGHT);
 	for (int i = 0; i < maxPlayers; i++)
 		if (strLen != 0 && strLen != USERNAME_MAX_LENGHT)
-			if (_tcscmp(player[i].username, gameMsgNewUser.username) == 0)
+			if (_tcscmp(player[i].username, username) == 0)
 				return FALSE;
 	return TRUE;
 }
-void AddUserToLoggedInUsersArray(TCHAR username[USERNAME_MAX_LENGHT]) {
-	_tcscpy_s(player[loggedInPlayers].username, USERNAME_MAX_LENGHT, username);
-	loggedInPlayers++;
+void AddUserToLoggedInUsersArray(TCHAR username[USERNAME_MAX_LENGHT], _client* player, int* loggedInPlayers) {
+	_tcscpy_s(player[(*loggedInPlayers)].username, USERNAME_MAX_LENGHT, username);
+	(*loggedInPlayers)++;
 }
 DWORD WINAPI ThreadNewUsers(LPVOID lpParameter) {
 	//Typecast thread param
@@ -114,9 +114,9 @@ DWORD WINAPI ThreadNewUsers(LPVOID lpParameter) {
 				//Wait for other threads to be done using gameSettings struct
 				//I'm avoiding using WaitForMultipleObjects() to avoid creating an array of mutexes
 				WaitForSingleObject(hGameSettingsMutex, INFINITE);
-					if(UsernameIsUnique(param->gameMsgNewUser->username, param->gameSettings->maxPlayers, (*param->gameMsgNewUser)) && loggedInPlayers < param->gameSettings->maxPlayers) {
+					if(UsernameIsUnique(param->gameMsgNewUser->username, param->gameSettings->maxPlayers, param->player) && (*param->loggedInPlayers) < param->gameSettings->maxPlayers) {
 						if(!param->gameSettings->hasStarted)
-							AddUserToLoggedInUsersArray(param->gameMsgNewUser->username);
+							AddUserToLoggedInUsersArray(param->gameMsgNewUser->username, param->player, param->loggedInPlayers);
 						else {
 							//AddUserToSpectatorsArray();
 						}
@@ -145,7 +145,11 @@ BOOL InitThreadBall(HANDLE* hThreadBall) {
 	_tprintf(_T("ERROR CREATING 'ball' THREAD\n"));
 	return FALSE;
 }
-BOOL InitThreadNewUsers(HANDLE* hThreadNewUsers, _newUsersParam* param) {
+BOOL InitThreadNewUsers(HANDLE* hThreadNewUsers, _gameSettings* gameSettings, _gameMsgNewUser* gameMsgNewUser, _client* player,  int* loggedInPlayers, _newUsersParam* param) {
+	param->gameSettings = gameSettings;
+	param->gameMsgNewUser = gameMsgNewUser;
+	param->player = player;
+	param->loggedInPlayers = loggedInPlayers;
 	//Create thread
 	(*hThreadNewUsers) = CreateThread(
 		NULL,				//hThreadNewUsers cannot be inherited by child processes
@@ -163,12 +167,10 @@ BOOL InitThreadNewUsers(HANDLE* hThreadNewUsers, _newUsersParam* param) {
 //BOOL InitThreadProcessPlayerMsg() {
 //
 //}
-BOOL InitThreads(HANDLE* hThreadBall, HANDLE* hThreadNewUsers, _gameSettings* gameSettings, _gameMsgNewUser* gameMsgNewUser, _newUsersParam* param) {
-	param->gameSettings = gameSettings;
-	param->gameMsgNewUser = gameMsgNewUser;
+BOOL InitThreads(HANDLE* hThreadBall, HANDLE* hThreadNewUsers, _gameSettings* gameSettings, _gameMsgNewUser* gameMsgNewUser, _client* player, int* loggedInPlayers, _newUsersParam* param) {
 	if (InitThreadBall(hThreadBall)) {
 		_tprintf(_T("Initialized 'ball' thread [SUSPENDED]\n"));
-		if (InitThreadNewUsers(hThreadNewUsers, param)) {
+		if (InitThreadNewUsers(hThreadNewUsers, gameSettings, gameMsgNewUser, player, loggedInPlayers, param)) {
 			_tprintf(_T("Initialized 'new users' thread [RUNNING]\n"));
 			return TRUE;
 		}
@@ -308,15 +310,16 @@ BOOL LoadBallsArray(_ball** ball, INT maxBalls, INT speed, INT size, INT gameAre
 		return TRUE;
 	}
 }
-BOOL LoadClientsArray(INT maxClients) {
-	player = (_client*)malloc(maxClients * sizeof(_client));
+BOOL LoadClientsArray(INT maxClients, _client** player) {
+	(*player) = (_client*)malloc(maxClients * sizeof(_client));
 	if (player == NULL) {
 		_tprintf(_T("ERROR LOADING CLIENTS ARRAY\n"));
 		return FALSE;
 	}
 	for (INT i = 0; i < maxClients; i++) {
-		player[i].id = -1;
-		memset(player[i].username, 0, USERNAME_MAX_LENGHT);
+		(*player)[i].id = -1;
+		(*player)[i].score = -1;
+		memset((*player)[i].username, 0, USERNAME_MAX_LENGHT);
 	}
 	return TRUE;
 }
@@ -370,19 +373,19 @@ BOOL LoadGameSettings(const _TCHAR* fileName, _gameSettings* gameSettings) {
 		_tprintf(_T("ERROR OPENING FILE: %s\n"), fileName);
 	return FALSE;
 }
-BOOL Initialize(HANDLE* hFileMapping, LPVOID* messageBaseAddr, _gameData** gameDataStart,
+BOOL InitializedServer(HANDLE* hFileMapping, LPVOID* messageBaseAddr, _gameData** gameDataStart,
 				_gameMsgNewUser** gameMsgNewUser, _serverResponse** serverResponse, _clientMsg** messageStart,
 				_clientMsg** messageIterator, const _TCHAR* defaultsFileName, _gameSettings* gameSettings,
 				_ball** ball, PHKEY topTenKey, HANDLE* hThreadBall,
-				HANDLE* hThreadNewUsers, _newUsersParam* param) {
+				HANDLE* hThreadNewUsers, _newUsersParam* param, _client** player, int* loggedInPlayers) {
 	if (LoadSharedInfo(hFileMapping, messageBaseAddr, gameDataStart, gameMsgNewUser, serverResponse, messageStart, messageIterator) &&
 		LoadGameSettings(defaultsFileName, gameSettings) &&
 		LoadBallsArray(ball, gameSettings->maxBalls, gameSettings->defaultBallSpeed, gameSettings->defaultBallSize, gameSettings->dimensions.width, gameSettings->dimensions.height) &&
 		GenerateMap(time(0), gameSettings, (*gameDataStart)) &&
-		LoadClientsArray(gameSettings->maxPlayers) &&
+		LoadClientsArray(gameSettings->maxPlayers, player) &&
 		LoadTopTen(topTenKey) &&
 		InitializeSyncMechanisms() &&
-		InitThreads(hThreadBall, hThreadNewUsers, gameSettings, (*gameMsgNewUser), param))
+		InitThreads(hThreadBall, hThreadNewUsers, gameSettings, (*gameMsgNewUser), (*player), loggedInPlayers,  param))
 		return TRUE;
 	return FALSE;
 }
@@ -450,13 +453,13 @@ VOID CmdLoop(_gameSettings* gameSettings, PHKEY topTenKey, HANDLE hThreadBall, _
 }
 
 //Dynamic Memory Management
-VOID DeallocDynamicMemory(_ball** ball) {
+VOID DeallocDynamicMemory(_ball** ball, _client** player) {
 	free((*ball));
 	free(player);
 }
-VOID CleanUp(_ball** ball, LPVOID messageBaseAddr, HANDLE hFileMapping, _gameData* gameDataStart) {
+VOID CleanUp(_ball** ball, _client** player, LPVOID messageBaseAddr, HANDLE hFileMapping, _gameData* gameDataStart) {
 	CloseSharedInfoHandles(messageBaseAddr, hFileMapping, gameDataStart);
-	DeallocDynamicMemory(ball);
+	DeallocDynamicMemory(ball, player);
 }
 
 //Main
@@ -464,6 +467,8 @@ INT _tmain(INT argc, const _TCHAR* argv[]) {
 	if (argc == 2) {
 		//Game vars
 		_gameSettings gameSettings;
+		_client* player = NULL;
+		int loggedInPlayers = 0;	//This var exists to avoid looping the player's array everytime to count
 		_ball* ball = NULL;
 		INT spectators = 0;
 
@@ -486,13 +491,13 @@ INT _tmain(INT argc, const _TCHAR* argv[]) {
 
 		_tprintf(_T("Arkanoid server:\nExecutable location: %s\n-------------------------------------------\nInitializing...\n"), argv[0]);
 
-		if (Initialize(&hFileMapping, &messageBaseAddr, &gameDataStart,
+		if (InitializedServer(&hFileMapping, &messageBaseAddr, &gameDataStart,
 					   &gameMsgNewUser, &serverResp, &messageStart,
 					   &messageIterator, argv[1], &gameSettings,
-					   &ball, &topTenKey, &hThreadBall, &hThreadNewUsers, &param)) {
+					   &ball, &topTenKey, &hThreadBall, &hThreadNewUsers, &param, &player, &loggedInPlayers)) {
 			_tprintf(_T("Done!\n"));
 			CmdLoop(&gameSettings, &topTenKey, hThreadBall, gameDataStart);
-			CleanUp(&ball, messageBaseAddr, hFileMapping, gameDataStart);
+			CleanUp(&ball, &player, messageBaseAddr, hFileMapping, gameDataStart);
 		}
 		else {
 			_tprintf(_T("-------------------------------------------\nPress ENTER to exit."));
