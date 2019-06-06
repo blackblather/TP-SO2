@@ -7,7 +7,7 @@ LPVOID messageBaseAddr;
 _gameData* gameDataStart = NULL;
 _gameMsgNewUser* gameMsgNewUser = NULL;
 _serverResponse* serverResp;
-_clientMsg* messageStart;
+_clientMsg* clientMsg;
 SYSTEM_INFO sysInfo;
 //(NEW USERS)
 HANDLE hNewUserMutex = NULL;
@@ -50,11 +50,11 @@ BOOL LoadGameMappedFileResources() {
 	if (OpenExistingGameMappedFile() &&
 		(gameDataStart = (_gameData*)LoadFileView(0, sysInfo.dwAllocationGranularity)) != NULL &&
 		(messageBaseAddr = LoadFileView(sysInfo.dwAllocationGranularity, sysInfo.dwAllocationGranularity)) != NULL) {
-		messageStart = (_clientMsg*)messageBaseAddr;
-		gameMsgNewUser = (_gameMsgNewUser*)messageStart;
-		messageStart = (_gameMsgNewUser*)messageStart + 1;
-		serverResp = (_serverResponse*)messageStart;
-		messageStart = (_serverResponse*)messageStart + 1;
+		clientMsg = (_clientMsg*)messageBaseAddr;
+		gameMsgNewUser = (_gameMsgNewUser*)clientMsg;
+		clientMsg = (_gameMsgNewUser*)clientMsg + 1;
+		serverResp = (_serverResponse*)clientMsg;
+		clientMsg = (_serverResponse*)clientMsg + 1;
 		return TRUE;
 	}
 	return FALSE;
@@ -107,8 +107,14 @@ BOOL LoadPlayerMsgResources() {
 	}
 	return FALSE;
 }
-BOOL MsgIteratorReachedTheEnd() {
-	return TRUE;
+BOOL ClientMsgPosReachedTheEnd(INT pos, INT max) {
+	return (pos == (max - 1));
+}
+BOOL IsValidMove(WPARAM wParam) {
+	return (wParam == VK_LEFT || wParam == VK_RIGHT);
+}
+BOOL NextSlotIsFree(INT currentPos) {
+	return clientMsg[currentPos + 1].move == none;
 }
 //------------------------------------------------------
 
@@ -132,5 +138,13 @@ BOOL LoggedIn(TCHAR username[USERNAME_MAX_LENGHT]) {
 	return response;
 }
 void WritePlayerMsg(WPARAM wParam) {
-
+	WaitForSingleObject(hNewPlayerMsgMutex, INFINITE);
+	if (ClientMsgPosReachedTheEnd(gameDataStart->clientMsgPos, gameDataStart->maxClientMsgs))
+		gameDataStart->clientMsgPos = 0;
+	if (IsValidMove(wParam) && NextSlotIsFree(gameDataStart->clientMsgPos)) {
+		clientMsg[gameDataStart->clientMsgPos].move = (wParam == VK_LEFT ? moveLeft : moveRight);
+		gameDataStart->clientMsgPos++;
+		ReleaseSemaphore(hNewPlayerMsgSemaphore, 1, NULL);
+	}
+	ReleaseMutex(hNewPlayerMsgMutex);
 }
