@@ -11,5 +11,7 @@
 #endif
 
 //Functions to export
+DLL_API VOID CloseSharedInfoHandles();
 DLL_API BOOL LoadGameResources();
 DLL_API BOOL LoggedIn(TCHAR username[USERNAME_MAX_LENGHT]);
+DLL_API void WriteClientMsg(WPARAM wParam);
