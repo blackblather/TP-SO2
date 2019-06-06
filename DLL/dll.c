@@ -3,13 +3,19 @@
 //"private" vars
 //(FILE VIEWS)
 HANDLE hFileMapping = NULL;
+LPVOID messageBaseAddr;
 _gameData* gameDataStart = NULL;
 _gameMsgNewUser* gameMsgNewUser = NULL;
+_serverResponse* serverResp;
+_clientMsg* messageStart;
 SYSTEM_INFO sysInfo;
 //(NEW USERS)
 HANDLE hNewUserMutex = NULL;
 HANDLE hNewUserServerEvent = NULL;
 HANDLE hNewUserClientEvent = NULL;
+//(PLAYER MSG)
+HANDLE hNewPlayerMsgMutex = NULL;
+HANDLE hNewPlayerMsgSemaphore = NULL;
 //------------------------------------------------------
 
 //"private" functions
@@ -41,9 +47,17 @@ LPVOID LoadFileView(int offset, int size) {
 		size);
 } 
 BOOL LoadGameMappedFileResources() {
-	return (OpenExistingGameMappedFile() &&
+	if (OpenExistingGameMappedFile() &&
 		(gameDataStart = (_gameData*)LoadFileView(0, sysInfo.dwAllocationGranularity)) != NULL &&
-		(gameMsgNewUser = (_gameMsgNewUser*)LoadFileView(sysInfo.dwAllocationGranularity, sysInfo.dwAllocationGranularity)) != NULL);
+		(messageBaseAddr = LoadFileView(sysInfo.dwAllocationGranularity, sysInfo.dwAllocationGranularity)) != NULL) {
+		messageStart = (_clientMsg*)messageBaseAddr;
+		gameMsgNewUser = (_gameMsgNewUser*)messageStart;
+		messageStart = (_gameMsgNewUser*)messageStart + 1;
+		serverResp = (_serverResponse*)messageStart;
+		messageStart = (_serverResponse*)messageStart + 1;
+		return TRUE;
+	}
+	return FALSE;
 }
 //(NEW USER)
 BOOL LoadNewUserResources() {
@@ -78,12 +92,36 @@ void ReadLoginResponse(BOOL* response) {
 	*response = gameMsgNewUser->response;
 	return;
 }
+//(PLAYER MSG)
+BOOL LoadPlayerMsgResources() {
+	hNewPlayerMsgMutex = OpenMutex(SYNCHRONIZE, //Only the SYNCHRONIZE access right is required to use a mutex
+		FALSE, //Child processess do NOT inherit this mutex
+		_T("newPlayerMsgMutex") //Mutex name
+	);
+	if (hNewPlayerMsgMutex != NULL) {
+		hNewPlayerMsgSemaphore = OpenSemaphore(SYNCHRONIZE | SEMAPHORE_MODIFY_STATE,
+			FALSE, //Child processess do NOT inherit this semaphore
+			TEXT("newPlayerMsgSemaphore"));	//Semaphore name
+		if (hNewPlayerMsgSemaphore != NULL)
+			return TRUE;
+	}
+	return FALSE;
+}
+BOOL MsgIteratorReachedTheEnd() {
+	return TRUE;
+}
 //------------------------------------------------------
 
 //"public" functions
+VOID CloseSharedInfoHandles() {
+	UnmapViewOfFile(messageBaseAddr);
+	UnmapViewOfFile((LPVOID)gameDataStart);
+	CloseHandle(hFileMapping);
+}
 BOOL LoadGameResources() {
 	return (LoadGameMappedFileResources() &&
-			LoadNewUserResources());
+			LoadNewUserResources() &&
+			LoadPlayerMsgResources());
 }
 BOOL LoggedIn(TCHAR username[USERNAME_MAX_LENGHT]) {
 	BOOL response = FALSE;
@@ -92,4 +130,7 @@ BOOL LoggedIn(TCHAR username[USERNAME_MAX_LENGHT]) {
 	ReadLoginResponse(&response);
 	ReleaseMutex(hNewUserMutex);
 	return response;
+}
+void WritePlayerMsg(WPARAM wParam) {
+
 }
