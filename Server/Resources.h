@@ -125,6 +125,7 @@ struct serverResponse_STRUCT {
 
 //GAMEMSG - CLIENT MSG--------------------
 enum movement_ENUM {
+	none,
 	moveLeft,
 	moveRight
 } typedef _movement;
