@@ -138,6 +138,12 @@ DWORD WINAPI ThreadNewUsers(LPVOID lpParameter) {
 BOOL IsValidPlayerMsg(_clientMsg msg) {
 	return TRUE;
 }
+void WipeClientMsg(_clientMsg* clientMsg) {
+	clientMsg->move = none;
+}
+BOOL ServerMsgPosReachedTheEnd(INT pos, INT max) {
+	return (pos == (max - 1));
+}
 DWORD WINAPI ThreadProcessPlayerMsg(LPVOID lpParameter) {
 	_processPlayerMsgParam* param = (_processPlayerMsgParam*)lpParameter;
 	HANDLE hNewPlayerMsgMutex = CreateMutex(
@@ -152,9 +158,12 @@ DWORD WINAPI ThreadProcessPlayerMsg(LPVOID lpParameter) {
 	if(hNewPlayerMsgMutex != NULL && hNewPlayerMsgSemaphore != NULL){
 		while (1) {
 			WaitForSingleObject(hNewPlayerMsgSemaphore, INFINITE);
+			if(ServerMsgPosReachedTheEnd(param->serverMsgPos, param->maxClientMsgs))
+				param->serverMsgPos = 0;
 			if (IsValidPlayerMsg(param->clientMsg[param->serverMsgPos])) {
 
 			}
+			WipeClientMsg(param->clientMsg + param->serverMsgPos);	//All param->clientMsg->move are initialized to 0 (none)
 			param->serverMsgPos++;
 		}
 	}
