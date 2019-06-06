@@ -4,7 +4,9 @@
 #define MAPPED_FILE_NAME _T("../Server/SharedInfo.txt")
 #define USERNAME_MAX_LENGHT 256	//64 characters, including '\0'
 #define MIN_BLOCKS 30	//Arbitrary value (used in map generation)
-#define MAX_BLOCKS 50	//Arbitrary value
+#define MAX_BLOCKS 50	//Arbitrary value (used in map generation)
+#define MAX_BALLS 3
+#define MAX_PLAYERS 3
 
 //RECTANGLE-------------------------------
 struct rect_STRUCT {
@@ -21,9 +23,12 @@ struct coordinates_STRUCT {
 //GAME SETTINGS---------------------------
 struct gameSettings_STRUCT {
 	//Configuraveis em "Defaults.txt"
-	INT maxPlayers,
-		maxSpectators,
-		maxBalls,
+	/*NOTA: MAX_BALLS e MAX_PLAYERS foram retirados do ficheiro de configuração,
+	  para evitar ter que criar uma versão da função "malloc" que reservasse
+	  espaço, de forma dinâmica, DENTRO da fileview, sem bugs. Desta maneira, simplifico
+	  o código, sacrificando um pouco de espaço pois reservo sempre 2 arrays de tam
+	  MAX_BALLS e MAX_PLAYERS*/
+	INT maxSpectators,
 		maxPerks,
 		defaultBallSpeed,
 		defaultBallSize,
@@ -98,7 +103,11 @@ struct client_STRUCT {
 
 //GAMEDATA--------------------------------
 struct gameData_STRUCT {
-	_block block[MAX_BLOCKS];
+	_block block[MAX_BLOCKS];	//Blocks array
+	_base base[MAX_PLAYERS];	//Base(s) array
+	_ball ball[MAX_BALLS];	//Ball(s) array
+	INT clientMsgPos;	//Index used by clients when writing messages
+	DWORD maxClientMsgs;	//Depende do tamanho das mensagens
 } typedef _gameData;
 
 //GAMEMSG - NEW USER----------------------
