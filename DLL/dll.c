@@ -115,8 +115,8 @@ BOOL ClientMsgPosReachedTheEnd(INT pos, INT max) {
 BOOL IsValidMove(WPARAM wParam) {
 	return (wParam == VK_LEFT || wParam == VK_RIGHT);
 }
-BOOL NextSlotIsFree(INT currentPos) {
-	return clientMsg[currentPos + 1].move == none;
+BOOL SlotIsFree(INT currentPos) {
+	return clientMsg[currentPos].move == none;
 }
 //------------------------------------------------------
 
@@ -139,11 +139,13 @@ BOOL LoggedIn(TCHAR username[USERNAME_MAX_LENGHT]) {
 	ReleaseMutex(hNewUserMutex);
 	return response;
 }
+
 void WritePlayerMsg(WPARAM wParam) {
 	WaitForSingleObject(hNewPlayerMsgMutex, INFINITE);
 	if (ClientMsgPosReachedTheEnd(gameDataStart->clientMsgPos, gameDataStart->maxClientMsgs))
 		gameDataStart->clientMsgPos = 0;
-	if (IsValidMove(wParam) && NextSlotIsFree(gameDataStart->clientMsgPos)) {
+	if (IsValidMove(wParam) && SlotIsFree(gameDataStart->clientMsgPos)) {
+		clientMsg[gameDataStart->clientMsgPos].clientId = clientId;
 		clientMsg[gameDataStart->clientMsgPos].move = (wParam == VK_LEFT ? moveLeft : moveRight);
 		gameDataStart->clientMsgPos++;
 		ReleaseSemaphore(hNewPlayerMsgSemaphore, 1, NULL);
