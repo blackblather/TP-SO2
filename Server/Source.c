@@ -13,7 +13,6 @@ struct newUsersParam_STRUCT {
 } typedef _newUsersParam;
 struct processPlayerMsgParam_STRUCT {
 	INT maxClientMsgs;	
-	INT serverMsgPos;	//Index used by the server when reading messages
 	_clientMsg* clientMsg;
 	_serverResponse* serverResponse;
 } typedef _processPlayerMsgParam;
@@ -148,6 +147,7 @@ BOOL ServerMsgPosReachedTheEnd(INT pos, INT max) {
 }
 DWORD WINAPI ThreadProcessPlayerMsg(LPVOID lpParameter) {
 	_processPlayerMsgParam* param = (_processPlayerMsgParam*)lpParameter;
+	INT serverMsgPos = 0;	//Index used by the server when reading messages
 	HANDLE hNewPlayerMsgMutex = CreateMutex(
 		NULL,		//Canoot be inherited by child processes
 		FALSE,		//The server doesn't "own" this mutex
@@ -160,13 +160,13 @@ DWORD WINAPI ThreadProcessPlayerMsg(LPVOID lpParameter) {
 	if(hNewPlayerMsgMutex != NULL && hNewPlayerMsgSemaphore != NULL){
 		while (1) {
 			WaitForSingleObject(hNewPlayerMsgSemaphore, INFINITE);
-			if(ServerMsgPosReachedTheEnd(param->serverMsgPos, param->maxClientMsgs))
-				param->serverMsgPos = 0;
-			if (IsValidPlayerMsg(param->clientMsg[param->serverMsgPos])) {
+			if(ServerMsgPosReachedTheEnd(serverMsgPos, param->maxClientMsgs))
+				serverMsgPos = 0;
+			if (IsValidPlayerMsg(param->clientMsg[serverMsgPos])) {
 
 			}
-			WipeClientMsg(param->clientMsg + param->serverMsgPos);	//All param->clientMsg->move are initialized to 0 (none)
-			param->serverMsgPos++;
+			WipeClientMsg(param->clientMsg + serverMsgPos);	//All param->clientMsg->move are initialized to 0 (none)
+			serverMsgPos++;
 		}
 	}
 	return 1;
@@ -208,7 +208,6 @@ BOOL InitThreadNewUsers(HANDLE* hThreadNewUsers, _gameSettings* gameSettings, _g
 }
 BOOL InitThreadProcessPlayerMsg(HANDLE* hThreadProcessPlayerMsg, INT maxClientMsgs, _clientMsg* clientMsg, _serverResponse* serverResponse, _processPlayerMsgParam* param) {
 	param->maxClientMsgs = maxClientMsgs;
-	param->serverMsgPos = 0;
 	param->clientMsg = clientMsg;
 	param->serverResponse = serverResponse;
 	(*hThreadProcessPlayerMsg) = CreateThread(
