@@ -382,6 +382,7 @@ BOOL LoadClientsArray(_client* player) {
 	for (INT i = 0; i < MAX_PLAYERS; i++) {
 		player[i].id = -1;
 		player[i].score = -1;
+		player[i].base = NULL;
 		memset(player[i].username, 0, USERNAME_MAX_LENGHT);
 	}
 	return TRUE;

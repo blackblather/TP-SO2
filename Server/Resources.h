@@ -98,6 +98,7 @@ struct perk_STRUCT {
 //CLIENT----------------------------------
 struct client_STRUCT {
 	INT id, score;
+	_base* base;
 	TCHAR username[USERNAME_MAX_LENGHT];
 } typedef _client;
 
