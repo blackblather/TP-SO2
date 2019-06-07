@@ -116,7 +116,7 @@ DWORD WINAPI ThreadNewUsers(LPVOID lpParameter) {
 			//Wait for other threads to be done using gameSettings struct
 			//I'm avoiding using WaitForMultipleObjects() to avoid creating an array of mutexes
 			WaitForSingleObject(hGameSettingsMutex, INFINITE);
-			if (UsernameIsUnique(param->gameMsgNewUser->username, param->player) && (*param->loggedInPlayers) < MAX_PLAYERS) {
+			if (_tcsnlen(param->gameMsgNewUser->username, USERNAME_MAX_LENGHT) > 0 && UsernameIsUnique(param->gameMsgNewUser->username, param->player) && (*param->loggedInPlayers) < MAX_PLAYERS) {
 				if (!param->gameSettings->hasStarted)
 					AddUserToLoggedInUsersArray(param->gameMsgNewUser->username, param->player, param->loggedInPlayers);
 				else {
