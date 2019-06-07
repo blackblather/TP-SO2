@@ -16,6 +16,7 @@ HANDLE hNewUserClientEvent = NULL;
 //(PLAYER MSG)
 HANDLE hNewPlayerMsgMutex = NULL;
 HANDLE hNewPlayerMsgSemaphore = NULL;
+INT clientId = -1;
 //------------------------------------------------------
 
 //"private" functions
@@ -86,10 +87,11 @@ void SendUsername(TCHAR username[USERNAME_MAX_LENGHT]) {
 	_tcscpy_s(gameMsgNewUser->username, USERNAME_MAX_LENGHT, username);
 	SetEvent(hNewUserServerEvent);
 }
-void ReadLoginResponse(BOOL* response) {
+void ReadLoginResponse(BOOL* loggedIn) {
 	//wait for event, and get server response
 	WaitForSingleObject(hNewUserClientEvent, INFINITE);
-	*response = gameMsgNewUser->response;
+	if((*loggedIn = gameMsgNewUser->loggedIn) == TRUE)
+		clientId = gameMsgNewUser->clientId;
 	return;
 }
 //(PLAYER MSG)

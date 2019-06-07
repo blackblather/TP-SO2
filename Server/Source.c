@@ -81,9 +81,8 @@ BOOL UsernameIsUnique(TCHAR username[USERNAME_MAX_LENGHT], _client* player) {
 				return FALSE;
 	return TRUE;
 }
-void AddUserToLoggedInUsersArray(TCHAR username[USERNAME_MAX_LENGHT], _client* player, int* loggedInPlayers) {
-	_tcscpy_s(player[(*loggedInPlayers)].username, USERNAME_MAX_LENGHT, username);
-	(*loggedInPlayers)++;
+void AddUserToLoggedInUsersArray(TCHAR username[USERNAME_MAX_LENGHT], _client* player, int loggedInPlayers) {
+	_tcscpy_s(player[loggedInPlayers].username, USERNAME_MAX_LENGHT, username);
 }
 DWORD WINAPI ThreadNewUsers(LPVOID lpParameter) {
 	//Typecast thread param
@@ -117,15 +116,18 @@ DWORD WINAPI ThreadNewUsers(LPVOID lpParameter) {
 			//I'm avoiding using WaitForMultipleObjects() to avoid creating an array of mutexes
 			WaitForSingleObject(hGameSettingsMutex, INFINITE);
 			if (_tcsnlen(param->gameMsgNewUser->username, USERNAME_MAX_LENGHT) > 0 && UsernameIsUnique(param->gameMsgNewUser->username, param->player) && (*param->loggedInPlayers) < MAX_PLAYERS) {
-				if (!param->gameSettings->hasStarted)
-					AddUserToLoggedInUsersArray(param->gameMsgNewUser->username, param->player, param->loggedInPlayers);
+				if (!param->gameSettings->hasStarted) {
+					param->gameMsgNewUser->clientId = (*param->loggedInPlayers);
+					AddUserToLoggedInUsersArray(param->gameMsgNewUser->username, param->player, (*param->loggedInPlayers));
+					(*param->loggedInPlayers)++;
+					param->gameMsgNewUser->loggedIn = TRUE;
+				}
 				else {
 					//AddUserToSpectatorsArray();
 				}
-				param->gameMsgNewUser->response = TRUE;
 			}
 			else
-				param->gameMsgNewUser->response = FALSE;
+				param->gameMsgNewUser->loggedIn = FALSE;
 			ReleaseMutex(hGameSettingsMutex);
 			ReleaseMutex(hPlayerMutex);
 			SetEvent(hNewUserClientEvent);

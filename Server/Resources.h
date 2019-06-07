@@ -114,7 +114,8 @@ struct gameData_STRUCT {
 //GAMEMSG - NEW USER----------------------
 struct gameMsgNewUser_STRUCT {
 	TCHAR username[256];
-	BOOL response;
+	BOOL loggedIn;
+	INT clientId;
 } typedef _gameMsgNewUser;
 
 //GAMEMSG - SERVER RESPONSE---------------
