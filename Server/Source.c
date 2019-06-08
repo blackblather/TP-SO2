@@ -10,10 +10,11 @@ struct newUsersParam_STRUCT {
 	_gameMsgNewUser* gameMsgNewUser;
 	_base* baseBaseAddr;
 	_client* player;
-	int* loggedInPlayers;
+	INT* loggedInPlayers;
 } typedef _newUsersParam;
 struct processPlayerMsgParam_STRUCT {
 	INT maxClientMsgs;
+	INT* loggedInPlayers;
 	_gameSettings* gameSettings;
 	_client* player;
 	_clientMsg* clientMsg;
@@ -62,6 +63,12 @@ VOID CloseSharedInfoHandles(LPVOID messageBaseAddr, HANDLE hFileMapping, _gameDa
 	UnmapViewOfFile(messageBaseAddr);
 	UnmapViewOfFile((LPVOID)gameDataStart);
 	CloseHandle(hFileMapping);
+}
+
+//Players -> Notify all players
+void NotifyPlayers(_client* player, INT loggedInPlayers) {
+	for (INT i = 0; i < loggedInPlayers; i++)
+		SetEvent(player[i].hUpdateMapEvent);
 }
 
 //Threads -> Ball
@@ -160,7 +167,7 @@ BOOL IsValidPlayerMsg(_clientMsg msg, _client* player, INT gameAreaWidth) {
 		return TRUE;
 	return FALSE;
 }
-void UpdateBasePos(_clientMsg msg, _client* player) {
+void UpdatePlayerBasePos(_clientMsg msg, _client* player) {
 	switch (msg.move) {
 		case moveLeft: player[msg.clientId].base->coordinates.x--; break;
 		case moveRight: player[msg.clientId].base->coordinates.x++; break;
@@ -191,8 +198,10 @@ DWORD WINAPI ThreadProcessPlayerMsg(LPVOID lpParameter) {
 			WaitForSingleObject(hPlayerMutex, INFINITE);
 				if(ServerMsgPosReachedTheEnd(serverMsgPos, param->maxClientMsgs))
 					serverMsgPos = 0;
-				if (IsValidPlayerMsg(param->clientMsg[serverMsgPos], param->player, param->gameSettings->dimensions.width))
-					UpdateBasePos(param->clientMsg[serverMsgPos], param->player);
+				if (IsValidPlayerMsg(param->clientMsg[serverMsgPos], param->player, param->gameSettings->dimensions.width)) {
+					UpdatePlayerBasePos(param->clientMsg[serverMsgPos], param->player);
+					NotifyPlayers(param->player, (*param->loggedInPlayers));
+				}
 				WipeClientMsg(param->clientMsg + serverMsgPos);	//All param->clientMsg->move are initialized to 0 (none)
 				serverMsgPos++;
 			ReleaseMutex(hPlayerMutex);
@@ -236,9 +245,11 @@ BOOL InitThreadNewUsers(HANDLE* hThreadNewUsers, _gameSettings* gameSettings, _g
 	_tprintf(_T("ERROR CREATING 'new users' THREAD\n"));
 	return FALSE;
 }
-BOOL InitThreadProcessPlayerMsg(HANDLE* hThreadProcessPlayerMsg, INT maxClientMsgs, _gameSettings* gameSettings, _clientMsg* clientMsg, _processPlayerMsgParam* param) {
+BOOL InitThreadProcessPlayerMsg(HANDLE* hThreadProcessPlayerMsg, INT maxClientMsgs, INT* loggedInPlayers, _gameSettings* gameSettings, _client* player, _clientMsg* clientMsg, _processPlayerMsgParam* param) {
 	param->maxClientMsgs = maxClientMsgs;
+	param->loggedInPlayers = loggedInPlayers;
 	param->gameSettings = gameSettings;
+	param->player = player;
 	param->clientMsg = clientMsg;
 	(*hThreadProcessPlayerMsg) = CreateThread(
 		NULL,					//hThreadProcessPlayerMsg cannot be inherited by child processes
@@ -255,13 +266,13 @@ BOOL InitThreadProcessPlayerMsg(HANDLE* hThreadProcessPlayerMsg, INT maxClientMs
 }
 BOOL InitThreads(HANDLE* hThreadBall, HANDLE* hThreadNewUsers, HANDLE* hThreadProcessPlayerMsg,
 				 _gameSettings* gameSettings, _gameMsgNewUser* gameMsgNewUser, _client* player,
-				 int* loggedInPlayers, _newUsersParam* newUsersParam, INT maxClientMsgs,
+				 INT* loggedInPlayers, _newUsersParam* newUsersParam, INT maxClientMsgs,
 				 _clientMsg* clientMsg, _processPlayerMsgParam* processPlayerMsgParam, _base* baseBaseAddr) {
 	if (InitThreadBall(hThreadBall)) {
 		_tprintf(_T("Initialized 'ball' thread [SUSPENDED]\n"));
 		if (InitThreadNewUsers(hThreadNewUsers, gameSettings, gameMsgNewUser, player, loggedInPlayers, baseBaseAddr, newUsersParam)) {
 			_tprintf(_T("Initialized 'new users' thread [RUNNING]\n"));
-			if(InitThreadProcessPlayerMsg(hThreadProcessPlayerMsg, maxClientMsgs, gameSettings, clientMsg, processPlayerMsgParam)){
+			if(InitThreadProcessPlayerMsg(hThreadProcessPlayerMsg, maxClientMsgs, loggedInPlayers, gameSettings, player, clientMsg, processPlayerMsgParam)){
 				_tprintf(_T("Initialized 'process player message' thread [RUNNING]\n"));
 				return TRUE;
 			}
