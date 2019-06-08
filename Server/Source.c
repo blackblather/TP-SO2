@@ -161,16 +161,16 @@ DWORD WINAPI ThreadNewUsers(LPVOID lpParameter) {
 //Threads -> Player Msgs
 BOOL IsValidPlayerMsg(_clientMsg msg, _client* player, INT gameAreaWidth) {
 	//TODO: Take into account other "player bars" to avoid collisions here
-	if (msg.move == moveLeft && player[msg.clientId].base->coordinates.x - 1 >= 0)
+	if (msg.move == moveLeft && player[msg.clientId].base->rectangle.left - 1 >= 0)
 		return TRUE;
-	if (msg.move == moveRight && player[msg.clientId].base->coordinates.x + player[msg.clientId].base->dimensions.width + 1 <= gameAreaWidth)
+	if (msg.move == moveRight && player[msg.clientId].base->rectangle.right + 1 <= gameAreaWidth)
 		return TRUE;
 	return FALSE;
 }
 void UpdatePlayerBasePos(_clientMsg msg, _client* player) {
 	switch (msg.move) {
-		case moveLeft: player[msg.clientId].base->coordinates.x--; break;
-		case moveRight: player[msg.clientId].base->coordinates.x++; break;
+		case moveLeft: player[msg.clientId].base->rectangle.left--; break;
+		case moveRight: player[msg.clientId].base->rectangle.right++; break;
 	}
 }
 void WipeClientMsg(_clientMsg* clientMsg) {

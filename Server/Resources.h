@@ -64,9 +64,8 @@ struct ball_STRUCT {
 
 //BASE------------------------------------
 struct base_STRUCT {
-	_coordinates coordinates;
+	RECT rectangle;
 	INT speed;
-	_rect dimensions;
 } typedef _base;
 
 //BLOCK-----------------------------------
@@ -78,6 +77,7 @@ enum blockType_ENUM {
 struct block_STRUCT {
 	_blockType type;
 	_coordinates coordinates;
+	BOOL destroyed;
 } typedef _block;
 
 //PERK------------------------------------
