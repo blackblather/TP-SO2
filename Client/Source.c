@@ -151,8 +151,13 @@ LRESULT CALLBACK LoginWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 						if (hwnd == NULL)
 							return 0;
 
-						//Show window
-						ShowWindow(hGameWnd, SW_SHOW);
+						if(InitUpdateMapThread(hGameWnd))
+							//Created thread successfully
+							ShowWindow(hGameWnd, SW_SHOW);	//Show window
+						else {
+							MessageBox(NULL, TEXT("Error creating 'Read Updated Map' thread.\nShutting down..."), TEXT("Error"), MB_OK | MB_ICONERROR);
+							PostQuitMessage(0);
+						}
 					}
 					else
 						MessageBox(NULL, TEXT("Error logging in, please try again") , TEXT("Error"), MB_OK | MB_ICONERROR);
