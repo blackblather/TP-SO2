@@ -17,6 +17,8 @@ HANDLE hNewUserClientEvent = NULL;
 HANDLE hNewPlayerMsgMutex = NULL;
 HANDLE hNewPlayerMsgSemaphore = NULL;
 INT clientId = -1;
+//(UPDATE MAP)
+HANDLE hReadUpdatedMapThread = NULL;
 //------------------------------------------------------
 
 //"private" functions
@@ -118,19 +120,21 @@ BOOL IsValidMove(WPARAM wParam) {
 BOOL SlotIsFree(INT currentPos) {
 	return clientMsg[currentPos].move == none;
 }
+//(UPDATE MAP)
+DWORD WINAPI UpdateMapThread(LPVOID lpParameter) {
+
+	return 0;
+}
 //------------------------------------------------------
 
 //"public" functions
+//(MAPPED FILE)
 VOID CloseSharedInfoHandles() {
 	UnmapViewOfFile(messageBaseAddr);
 	UnmapViewOfFile((LPVOID)gameDataStart);
 	CloseHandle(hFileMapping);
 }
-BOOL LoadGameResources() {
-	return (LoadGameMappedFileResources() &&
-			LoadNewUserResources() &&
-			LoadPlayerMsgResources());
-}
+//(NEW USER)
 BOOL LoggedIn(TCHAR username[USERNAME_MAX_LENGHT]) {
 	BOOL response = FALSE;
 	WaitForSingleObject(hNewUserMutex, INFINITE);
@@ -139,7 +143,7 @@ BOOL LoggedIn(TCHAR username[USERNAME_MAX_LENGHT]) {
 	ReleaseMutex(hNewUserMutex);
 	return response;
 }
-
+//(PLAYER MSG)
 void WritePlayerMsg(WPARAM wParam) {
 	WaitForSingleObject(hNewPlayerMsgMutex, INFINITE);
 	if (ClientMsgPosReachedTheEnd(gameDataStart->clientMsgPos, gameDataStart->maxClientMsgs))
@@ -151,4 +155,22 @@ void WritePlayerMsg(WPARAM wParam) {
 		ReleaseSemaphore(hNewPlayerMsgSemaphore, 1, NULL);
 	}
 	ReleaseMutex(hNewPlayerMsgMutex);
+}
+//(UPDATE MAP)
+BOOL InitUpdateMapThread(HWND hGameWnd) {
+	hReadUpdatedMapThread = CreateThread(
+		NULL,	//hThreadNewUsers cannot be inherited by child processes
+		0,	//Default stack size
+		UpdateMapThread,	//Function to execute
+		NULL,	//Function param
+		0,	//The thread runs immediately after creation
+		NULL	//Thread ID is not stored anywhere
+	);
+	return hReadUpdatedMapThread != NULL;
+}
+//(SERVER INITIALIZATION)
+BOOL LoadGameResources() {
+	return (LoadGameMappedFileResources() &&
+		LoadNewUserResources() &&
+		LoadPlayerMsgResources());
 }
