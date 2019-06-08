@@ -65,8 +65,8 @@ struct ball_STRUCT {
 //BASE------------------------------------
 struct base_STRUCT {
 	_coordinates coordinates;
-	INT size,
-		speed;
+	INT speed;
+	_rect dimensions;
 } typedef _base;
 
 //BLOCK-----------------------------------
@@ -97,7 +97,7 @@ struct perk_STRUCT {
 
 //CLIENT----------------------------------
 struct client_STRUCT {
-	INT id, score;
+	INT score;
 	_base* base;
 	TCHAR username[USERNAME_MAX_LENGHT];
 } typedef _client;
@@ -132,5 +132,6 @@ enum movement_ENUM {
 	moveRight
 } typedef _movement;
 struct clientMsg_STRUCT {
+	INT clientId;
 	_movement move;
 } typedef _clientMsg;
