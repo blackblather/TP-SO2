@@ -118,13 +118,6 @@ struct gameMsgNewUser_STRUCT {
 	INT clientId;
 } typedef _gameMsgNewUser;
 
-//GAMEMSG - SERVER RESPONSE---------------
-struct serverResponse_STRUCT {
-	RECT baseNew, baseOld;
-	RECT blockNew, blockOld;
-	RECT ballNew, ballOld;
-} typedef _serverResponse;
-
 //GAMEMSG - CLIENT MSG--------------------
 enum movement_ENUM {
 	none,
