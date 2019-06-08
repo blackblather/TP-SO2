@@ -308,14 +308,17 @@ BOOL LoadBalls(_gameData* gameDataStart, INT speed, INT size, INT gameAreaWidth,
 VOID InitBlocksrray(_gameData* gameDataStart, INT size) {
 	//TODO: ADD SYNC MECHANISM HERE (gameDataStart is used in main thread (to generate new maps) and in the ball thread (to destroy blocks))
 	for (INT i = 0; i < size; i++) {
-		gameDataStart->block[i].coordinates.x = -1;
-		gameDataStart->block[i].coordinates.y = -1;
 		gameDataStart->block[i].type = normal;
+		gameDataStart->block[i].rectangle.bottom = 0;
+		gameDataStart->block[i].rectangle.top = 0;
+		gameDataStart->block[i].rectangle.left = 0;
+		gameDataStart->block[i].rectangle.right = 0;
+		gameDataStart->block[i].destroyed = TRUE;
 	}
 }
 BOOL BlockIsInPos(_gameData gameData, INT x, INT y, INT size) {
 	for (INT i = 0; i < size; i++)
-		if (gameData.block[i].coordinates.x == x && gameData.block[i].coordinates.y == y)
+		if (gameData.block[i].rectangle.left == x && gameData.block[i].rectangle.right == y)
 			return TRUE;
 	return FALSE;
 }
@@ -344,8 +347,11 @@ BOOL GenerateMap(UINT seed, _gameSettings* gameSettings, _gameData* gameDataStar
 			posX = borderPadding + ((rand() % maxBlocksPerLine) * gameSettings->blockDimensions.width);
 			posY = borderPadding + ((rand() % maxBlockLines) * gameSettings->blockDimensions.height);
 		} while (BlockIsInPos((*gameDataStart), posX, posY, i));	//Aqui uso "i" em vez do tamanho do array, porque nao vale a pena verificar espaços vazios do array
-		gameDataStart->block[i].coordinates.x = posX;
-		gameDataStart->block[i].coordinates.y = posY;
+		gameDataStart->block[i].rectangle.left = posX;
+		gameDataStart->block[i].rectangle.top = posY;
+		gameDataStart->block[i].rectangle.right = posX + gameSettings->blockDimensions.width;
+		gameDataStart->block[i].rectangle.bottom = posY + gameSettings->blockDimensions.height;
+		gameDataStart->block[i].destroyed = FALSE;
 	}
 	return TRUE;
 }

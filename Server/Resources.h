@@ -76,7 +76,7 @@ enum blockType_ENUM {
 } typedef _blockType;
 struct block_STRUCT {
 	_blockType type;
-	_coordinates coordinates;
+	RECT rectangle;
 	BOOL destroyed;
 } typedef _block;
 
