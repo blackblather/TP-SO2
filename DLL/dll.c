@@ -52,9 +52,8 @@ BOOL LoadGameMappedFileResources() {
 	if (OpenExistingGameMappedFile() &&
 		(gameDataStart = (_gameData*)LoadFileView(0, sysInfo.dwAllocationGranularity)) != NULL &&
 		(messageBaseAddr = LoadFileView(sysInfo.dwAllocationGranularity, sysInfo.dwAllocationGranularity)) != NULL) {
-		clientMsg = (_clientMsg*)messageBaseAddr;
-		gameMsgNewUser = (_gameMsgNewUser*)clientMsg;
-		clientMsg = (_gameMsgNewUser*)clientMsg + 1;
+		gameMsgNewUser = (_gameMsgNewUser*)messageBaseAddr;
+		clientMsg = gameMsgNewUser + 1;
 		return TRUE;
 	}
 	return FALSE;

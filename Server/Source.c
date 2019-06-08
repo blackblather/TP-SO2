@@ -48,9 +48,8 @@ BOOL LoadSharedInfo(HANDLE* hFileMapping, LPVOID* messageBaseAddr, _gameData** g
 		_tprintf(_T("Successfully mapped file in memory\n"));
 		if (((*gameDataStart) = (_gameData*) LoadFileView((*hFileMapping), 0, sysInfo.dwAllocationGranularity)) != NULL && ((*messageBaseAddr) = LoadFileView((*hFileMapping), sysInfo.dwAllocationGranularity, sysInfo.dwAllocationGranularity)) != NULL) {
 			_tprintf(_T("Successfully created file views\n"));
-			(*messageStart) = (_client*)(*messageBaseAddr);
-			(*gameMsgNewUser) = (_gameMsgNewUser*)(*messageStart);
-			(*messageStart) = (_gameMsgNewUser*)(*messageStart) + 1;
+			(*gameMsgNewUser) = (_gameMsgNewUser*)(*messageBaseAddr);
+			(*messageStart) = (*gameMsgNewUser) + 1;
 			return TRUE;
 		} else
 			_tprintf(_T("ERROR CREATING FILE VIEWS.\n"));
@@ -145,6 +144,12 @@ BOOL IsValidPlayerMsg(_clientMsg msg, _client* player, INT gameAreaWidth) {
 		return TRUE;
 	return FALSE;
 }
+void UpdateBasePos(_clientMsg msg, _client* player) {
+	switch (msg.move) {
+		case moveLeft: player[msg.clientId].base->coordinates.x--; break;
+		case moveRight: player[msg.clientId].base->coordinates.x++; break;
+	}
+}
 void WipeClientMsg(_clientMsg* clientMsg) {
 	clientMsg->move = none;
 }
@@ -170,9 +175,8 @@ DWORD WINAPI ThreadProcessPlayerMsg(LPVOID lpParameter) {
 			WaitForSingleObject(hPlayerMutex, INFINITE);
 				if(ServerMsgPosReachedTheEnd(serverMsgPos, param->maxClientMsgs))
 					serverMsgPos = 0;
-				if (IsValidPlayerMsg(param->clientMsg[serverMsgPos], param->player, param->gameSettings->dimensions.width)) {
-					//UpdateGameData()
-				}
+				if (IsValidPlayerMsg(param->clientMsg[serverMsgPos], param->player, param->gameSettings->dimensions.width))
+					UpdateBasePos(param->clientMsg[serverMsgPos], param->player);
 				WipeClientMsg(param->clientMsg + serverMsgPos);	//All param->clientMsg->move are initialized to 0 (none)
 				serverMsgPos++;
 			ReleaseMutex(hPlayerMutex);
