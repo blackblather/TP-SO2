@@ -6,7 +6,6 @@ HANDLE hFileMapping = NULL;
 LPVOID messageBaseAddr;
 _gameData* gameDataStart = NULL;
 _gameMsgNewUser* gameMsgNewUser = NULL;
-_serverResponse* serverResp;
 _clientMsg* clientMsg;
 SYSTEM_INFO sysInfo;
 //(NEW USERS)
@@ -56,8 +55,6 @@ BOOL LoadGameMappedFileResources() {
 		clientMsg = (_clientMsg*)messageBaseAddr;
 		gameMsgNewUser = (_gameMsgNewUser*)clientMsg;
 		clientMsg = (_gameMsgNewUser*)clientMsg + 1;
-		serverResp = (_serverResponse*)clientMsg;
-		clientMsg = (_serverResponse*)clientMsg + 1;
 		return TRUE;
 	}
 	return FALSE;
