@@ -17,7 +17,6 @@ struct processPlayerMsgParam_STRUCT {
 	_gameSettings* gameSettings;
 	_client* player;
 	_clientMsg* clientMsg;
-	_serverResponse* serverResponse;
 } typedef _processPlayerMsgParam;
 
 //Client vars
@@ -34,7 +33,7 @@ LPVOID LoadFileView(HANDLE hFileMapping, int offset, int size) {
 		offset,
 		size);
 }
-BOOL LoadSharedInfo(HANDLE* hFileMapping, LPVOID* messageBaseAddr, _gameData** gameDataStart, _gameMsgNewUser** gameMsgNewUser, _serverResponse** serverResp, _clientMsg** messageStart) {
+BOOL LoadSharedInfo(HANDLE* hFileMapping, LPVOID* messageBaseAddr, _gameData** gameDataStart, _gameMsgNewUser** gameMsgNewUser, _clientMsg** messageStart) {
 	SYSTEM_INFO sysInfo;
 	GetSystemInfo(&sysInfo);
 	//SRC #2: https://docs.microsoft.com/en-us/windows/desktop/api/WinBase/nf-winbase-createfilemappinga
@@ -52,8 +51,6 @@ BOOL LoadSharedInfo(HANDLE* hFileMapping, LPVOID* messageBaseAddr, _gameData** g
 			(*messageStart) = (_client*)(*messageBaseAddr);
 			(*gameMsgNewUser) = (_gameMsgNewUser*)(*messageStart);
 			(*messageStart) = (_gameMsgNewUser*)(*messageStart) + 1;
-			(*serverResp) = (_serverResponse*)(*messageStart);
-			(*messageStart) = (_serverResponse*)(*messageStart) + 1;
 			return TRUE;
 		} else
 			_tprintf(_T("ERROR CREATING FILE VIEWS.\n"));
@@ -148,12 +145,6 @@ BOOL IsValidPlayerMsg(_clientMsg msg, _client* player, INT gameAreaWidth) {
 		return TRUE;
 	return FALSE;
 }
-void UpdateServerResponse(_clientMsg msg, _client* player) {
-	if (msg.move == moveLeft)
-		player[msg.clientId].base--;
-	if (msg.move == moveRight)
-		player[msg.clientId].base++;
-}
 void WipeClientMsg(_clientMsg* clientMsg) {
 	clientMsg->move = none;
 }
@@ -179,8 +170,9 @@ DWORD WINAPI ThreadProcessPlayerMsg(LPVOID lpParameter) {
 			WaitForSingleObject(hPlayerMutex, INFINITE);
 				if(ServerMsgPosReachedTheEnd(serverMsgPos, param->maxClientMsgs))
 					serverMsgPos = 0;
-				if (IsValidPlayerMsg(param->clientMsg[serverMsgPos], param->player, param->gameSettings->dimensions.width))
-					UpdateServerResponse(param->clientMsg[serverMsgPos], param->player);
+				if (IsValidPlayerMsg(param->clientMsg[serverMsgPos], param->player, param->gameSettings->dimensions.width)) {
+					//UpdateGameData()
+				}
 				WipeClientMsg(param->clientMsg + serverMsgPos);	//All param->clientMsg->move are initialized to 0 (none)
 				serverMsgPos++;
 			ReleaseMutex(hPlayerMutex);
@@ -224,11 +216,10 @@ BOOL InitThreadNewUsers(HANDLE* hThreadNewUsers, _gameSettings* gameSettings, _g
 	_tprintf(_T("ERROR CREATING 'new users' THREAD\n"));
 	return FALSE;
 }
-BOOL InitThreadProcessPlayerMsg(HANDLE* hThreadProcessPlayerMsg, INT maxClientMsgs, _gameSettings* gameSettings, _clientMsg* clientMsg, _serverResponse* serverResponse, _processPlayerMsgParam* param) {
+BOOL InitThreadProcessPlayerMsg(HANDLE* hThreadProcessPlayerMsg, INT maxClientMsgs, _gameSettings* gameSettings, _clientMsg* clientMsg, _processPlayerMsgParam* param) {
 	param->maxClientMsgs = maxClientMsgs;
 	param->gameSettings = gameSettings;
 	param->clientMsg = clientMsg;
-	param->serverResponse = serverResponse;
 	(*hThreadProcessPlayerMsg) = CreateThread(
 		NULL,					//hThreadProcessPlayerMsg cannot be inherited by child processes
 		0,						//Default stack size
@@ -245,12 +236,12 @@ BOOL InitThreadProcessPlayerMsg(HANDLE* hThreadProcessPlayerMsg, INT maxClientMs
 BOOL InitThreads(HANDLE* hThreadBall, HANDLE* hThreadNewUsers, HANDLE* hThreadProcessPlayerMsg,
 				 _gameSettings* gameSettings, _gameMsgNewUser* gameMsgNewUser, _client* player,
 				 int* loggedInPlayers, _newUsersParam* newUsersParam, INT maxClientMsgs,
-				 _clientMsg* clientMsg, _serverResponse* serverResponse, _processPlayerMsgParam* processPlayerMsgParam, _base* baseBaseAddr) {
+				 _clientMsg* clientMsg, _processPlayerMsgParam* processPlayerMsgParam, _base* baseBaseAddr) {
 	if (InitThreadBall(hThreadBall)) {
 		_tprintf(_T("Initialized 'ball' thread [SUSPENDED]\n"));
 		if (InitThreadNewUsers(hThreadNewUsers, gameSettings, gameMsgNewUser, player, loggedInPlayers, baseBaseAddr, newUsersParam)) {
 			_tprintf(_T("Initialized 'new users' thread [RUNNING]\n"));
-			if(InitThreadProcessPlayerMsg(hThreadProcessPlayerMsg, maxClientMsgs, gameSettings, clientMsg, serverResponse, processPlayerMsgParam)){
+			if(InitThreadProcessPlayerMsg(hThreadProcessPlayerMsg, maxClientMsgs, gameSettings, clientMsg, processPlayerMsgParam)){
 				_tprintf(_T("Initialized 'process player message' thread [RUNNING]\n"));
 				return TRUE;
 			}
@@ -394,7 +385,7 @@ BOOL LoadGameData(_gameSettings* gameSettings, _gameData* gameDataStart, INT bal
 
 	gameDataStart->clientMsgPos = 0;
 	DWORD msgSize = sizeof(_clientMsg);
-	DWORD freeSpace = sysInfo.dwAllocationGranularity - sizeof(_gameMsgNewUser) - sizeof(_serverResponse);
+	DWORD freeSpace = sysInfo.dwAllocationGranularity - sizeof(_gameMsgNewUser);
 	gameDataStart->maxClientMsgs = (DWORD) (freeSpace / msgSize);
 	return TRUE;
 }
@@ -453,17 +444,17 @@ BOOL LoadGameSettings(const _TCHAR* fileName, _gameSettings* gameSettings) {
 	return FALSE;
 }
 BOOL InitializedServer(HANDLE* hFileMapping, LPVOID* messageBaseAddr, _gameData** gameDataStart,
-					_gameMsgNewUser** gameMsgNewUser, _serverResponse** serverResponse, _clientMsg** messageStart,
+					_gameMsgNewUser** gameMsgNewUser, _clientMsg** messageStart,
 					const _TCHAR* defaultsFileName, _gameSettings* gameSettings, PHKEY topTenKey,
 					HANDLE* hThreadBall, HANDLE* hThreadNewUsers, _newUsersParam* newUsersParam,
 					_client* player, int* loggedInPlayers, HANDLE* hThreadProcessPlayerMsg, _processPlayerMsgParam* processPlayerMsgParam) {
-	if (LoadSharedInfo(hFileMapping, messageBaseAddr, gameDataStart, gameMsgNewUser, serverResponse, messageStart) &&
+	if (LoadSharedInfo(hFileMapping, messageBaseAddr, gameDataStart, gameMsgNewUser, messageStart) &&
 		LoadGameSettings(defaultsFileName, gameSettings) &&
 		LoadGameData(gameSettings, (*gameDataStart), gameSettings->defaultBallSpeed, gameSettings->defaultBallSize, gameSettings->dimensions.width, gameSettings->dimensions.height) &&
 		LoadClientsArray(player) &&
 		LoadTopTen(topTenKey) &&
 		InitializeSyncMechanisms() &&
-		InitThreads(hThreadBall, hThreadNewUsers, hThreadProcessPlayerMsg, gameSettings, (*gameMsgNewUser), player, loggedInPlayers, newUsersParam, (*gameDataStart)->maxClientMsgs, (*messageStart), (*serverResponse), processPlayerMsgParam, (*gameDataStart)->base))
+		InitThreads(hThreadBall, hThreadNewUsers, hThreadProcessPlayerMsg, gameSettings, (*gameMsgNewUser), player, loggedInPlayers, newUsersParam, (*gameDataStart)->maxClientMsgs, (*messageStart), processPlayerMsgParam, (*gameDataStart)->base))
 		return TRUE;
 	return FALSE;
 }
@@ -550,7 +541,6 @@ INT _tmain(INT argc, const _TCHAR* argv[]) {
 		LPVOID messageBaseAddr;
 		_gameData* gameDataStart;
 		_gameMsgNewUser* gameMsgNewUser;
-		_serverResponse* serverResp;
 		_clientMsg* messageStart;
 
 		//Thread handles
@@ -566,7 +556,7 @@ INT _tmain(INT argc, const _TCHAR* argv[]) {
 		_tprintf(_T("Arkanoid server:\nExecutable location: %s\n-------------------------------------------\nInitializing...\n"), argv[0]);
 
 		if (InitializedServer(&hFileMapping, &messageBaseAddr, &gameDataStart,
-							  &gameMsgNewUser, &serverResp, &messageStart,
+							  &gameMsgNewUser, &messageStart,
 							  argv[1], &gameSettings, &topTenKey,
 							  &hThreadBall, &hThreadNewUsers, &param,
 							  player, &loggedInPlayers, &hThreadProcessPlayerMsg, &processPlayerMsgParam)) {
