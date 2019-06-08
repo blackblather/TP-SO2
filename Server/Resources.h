@@ -56,9 +56,8 @@ enum ballDirection_ENUM {
 } typedef _ballDirection;
 struct ball_STRUCT {
 	_ballDirection direction;
-	_coordinates coordinates;
-	INT size,
-		speed;
+	INT speed;
+	RECT rectangle;
 	BOOL isActive;
 } typedef _ball;
 

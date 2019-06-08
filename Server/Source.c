@@ -295,9 +295,10 @@ INT GetActiveBalls(_ball* ball, INT maxBalls) {
 BOOL LoadBalls(_gameData* gameDataStart, INT speed, INT size, INT gameAreaWidth, INT gameAreaHeight) {
 	for (INT i = 0; i < MAX_BALLS; i++) {
 		gameDataStart->ball[i].direction = topRight;
-		gameDataStart->ball[i].size = size;
-		gameDataStart->ball[i].coordinates.x = (gameAreaWidth / 2) - (gameDataStart->ball[i].size / 2);
-		gameDataStart->ball[i].coordinates.y = (gameAreaHeight - 50);
+		gameDataStart->ball[i].rectangle.left = (gameAreaWidth / 2) - (size / 2);
+		gameDataStart->ball[i].rectangle.top = (gameAreaHeight - 50);
+		gameDataStart->ball[i].rectangle.right = gameDataStart->ball[i].rectangle.left + size;
+		gameDataStart->ball[i].rectangle.bottom = gameDataStart->ball[i].rectangle.top + size;
 		gameDataStart->ball[i].speed = speed;
 		gameDataStart->ball[i].isActive = FALSE;
 	}
