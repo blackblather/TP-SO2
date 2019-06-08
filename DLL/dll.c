@@ -12,6 +12,7 @@ SYSTEM_INFO sysInfo;
 HANDLE hNewUserMutex = NULL;
 HANDLE hNewUserServerEvent = NULL;
 HANDLE hNewUserClientEvent = NULL;
+TCHAR updateMapEventName[20];
 //(PLAYER MSG)
 HANDLE hNewPlayerMsgMutex = NULL;
 HANDLE hNewPlayerMsgSemaphore = NULL;
@@ -88,8 +89,10 @@ void SendUsername(TCHAR username[USERNAME_MAX_LENGHT]) {
 void ReadLoginResponse(BOOL* loggedIn) {
 	//wait for event, and get server response
 	WaitForSingleObject(hNewUserClientEvent, INFINITE);
-	if((*loggedIn = gameMsgNewUser->loggedIn) == TRUE)
+	if ((*loggedIn = gameMsgNewUser->loggedIn) == TRUE) {
 		clientId = gameMsgNewUser->clientId;
+		_tcscpy_s(updateMapEventName, 20, gameMsgNewUser->updateMapEventName);
+	}
 	return;
 }
 //(PLAYER MSG)
@@ -118,7 +121,10 @@ BOOL SlotIsFree(INT currentPos) {
 }
 //(UPDATE MAP)
 DWORD WINAPI UpdateMapThread(LPVOID lpParameter) {
+	//OPEN hUpdateMapEvent here
+	/*while (1) {
 
+	}*/
 	return 0;
 }
 //------------------------------------------------------
