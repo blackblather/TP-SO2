@@ -79,9 +79,18 @@ BOOL UsernameIsUnique(TCHAR username[USERNAME_MAX_LENGHT], _client* player) {
 				return FALSE;
 	return TRUE;
 }
-void AddUserToLoggedInUsersArray(TCHAR username[USERNAME_MAX_LENGHT], _client* player, INT loggedInPlayers, _base* base) {
-	_tcscpy_s(player[loggedInPlayers].username, USERNAME_MAX_LENGHT, username);
-	player[loggedInPlayers].base = base + loggedInPlayers;
+BOOL AddUserToLoggedInUsersArray(TCHAR updateMapEventName[20], TCHAR username[USERNAME_MAX_LENGHT], _client* player, INT pos, _base* base) {
+	player[pos].hUpdateMapEvent = CreateEvent(
+		NULL,	//Security attributes
+		FALSE,	//Automatic reset
+		FALSE,	//Inital state = not set
+		updateMapEventName);	//Event name (clients need the name to wait for their event to be set)
+	if (player[pos].hUpdateMapEvent != NULL) {
+		player[pos].base = base + pos;
+		_tcscpy_s(player[pos].username, USERNAME_MAX_LENGHT, username);
+		return TRUE;
+	}
+	return FALSE;
 }
 DWORD WINAPI ThreadNewUsers(LPVOID lpParameter) {
 	//Typecast thread param
@@ -116,10 +125,17 @@ DWORD WINAPI ThreadNewUsers(LPVOID lpParameter) {
 			WaitForSingleObject(hGameSettingsMutex, INFINITE);
 			if (_tcsnlen(param->gameMsgNewUser->username, USERNAME_MAX_LENGHT) > 0 && UsernameIsUnique(param->gameMsgNewUser->username, param->player) && (*param->loggedInPlayers) < MAX_PLAYERS) {
 				if (!param->gameSettings->hasStarted) {
-					param->gameMsgNewUser->clientId = (*param->loggedInPlayers);
-					AddUserToLoggedInUsersArray(param->gameMsgNewUser->username, param->player, (*param->loggedInPlayers), param->baseBaseAddr);
-					(*param->loggedInPlayers)++;
-					param->gameMsgNewUser->loggedIn = TRUE;
+					//15 for "updateMapEvent_"
+					//4 for clientId -> [0, 9999]
+					//1 for '\0'
+					TCHAR updateMapEventName[20];
+					_stprintf_s(updateMapEventName, 20, TEXT("updateMapEvent_%d"), (*param->loggedInPlayers));
+					if (AddUserToLoggedInUsersArray(updateMapEventName, param->gameMsgNewUser->username, param->player, (*param->loggedInPlayers), param->baseBaseAddr)){
+						param->gameMsgNewUser->clientId = (*param->loggedInPlayers);
+						_tcscpy_s(param->gameMsgNewUser->updateMapEventName, 20, updateMapEventName);
+						(*param->loggedInPlayers)++;
+						param->gameMsgNewUser->loggedIn = TRUE;
+					}
 				}
 				else {
 					//AddUserToSpectatorsArray();
@@ -398,6 +414,7 @@ BOOL LoadClientsArray(_client* player) {
 		player[i].score = -1;
 		player[i].base = NULL;
 		memset(player[i].username, 0, USERNAME_MAX_LENGHT);
+		player[i].hUpdateMapEvent = NULL;
 	}
 	return TRUE;
 }
