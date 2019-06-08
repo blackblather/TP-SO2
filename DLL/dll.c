@@ -12,13 +12,15 @@ SYSTEM_INFO sysInfo;
 HANDLE hNewUserMutex = NULL;
 HANDLE hNewUserServerEvent = NULL;
 HANDLE hNewUserClientEvent = NULL;
-TCHAR updateMapEventName[20];
+TCHAR updateMapEventName[20];	//Used in (UPDATE MAP) but recieved in (NEW USERS)
 //(PLAYER MSG)
 HANDLE hNewPlayerMsgMutex = NULL;
 HANDLE hNewPlayerMsgSemaphore = NULL;
 INT clientId = -1;
 //(UPDATE MAP)
 HANDLE hReadUpdatedMapThread = NULL;
+HANDLE hUpdateMapEvent = NULL;
+_gameData oldGameData, newGameData;
 //------------------------------------------------------
 
 //"private" functions
@@ -120,11 +122,28 @@ BOOL SlotIsFree(INT currentPos) {
 	return clientMsg[currentPos].move == none;
 }
 //(UPDATE MAP)
+void CopyGameData(_gameData* destination, _gameData* origin) {
+	for (int i = 0; i < MAX_BLOCKS; i++)
+		destination->block[i] = origin->block[i];
+	for (int i = 0; i < MAX_PLAYERS; i++)
+		destination->base[i] = origin->base[i];
+	for (int i = 0; i < MAX_BALLS; i++)
+		destination->ball[i] = origin->ball[i];
+	destination->clientMsgPos = origin->clientMsgPos;
+	destination->maxClientMsgs = origin->maxClientMsgs;
+}
 DWORD WINAPI UpdateMapThread(LPVOID lpParameter) {
-	//OPEN hUpdateMapEvent here
-	/*while (1) {
-
-	}*/
+	hUpdateMapEvent = OpenEvent(SYNCHRONIZE | EVENT_MODIFY_STATE, //The right to use the object for synchronization
+		FALSE, //Child processess do NOT inherit this mutex
+		updateMapEventName //Event name
+	);
+	if (hUpdateMapEvent != NULL) {
+		while (1) {
+			WaitForSingleObject(hUpdateMapEvent, INFINITE);
+			int i = 0;
+		}
+	}
+	
 	return 0;
 }
 //------------------------------------------------------
