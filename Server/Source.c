@@ -24,6 +24,8 @@ struct processPlayerMsgParam_STRUCT {
 HANDLE hPlayerMutex;		//To use "player" array and/or "loggedInPlayers", use this mutex
 //Game Settings Mutex
 HANDLE hGameSettingsMutex;
+//Game Data Mutex
+HANDLE hGameDataMutex;
 
 //File Mapping
 LPVOID LoadFileView(HANDLE hFileMapping, int offset, int size) {
@@ -65,15 +67,12 @@ VOID CloseSharedInfoHandles(LPVOID messageBaseAddr, HANDLE hFileMapping, _gameDa
 	CloseHandle(hFileMapping);
 }
 
-//Players -> Notify all players
-void NotifyPlayers(_client* player, INT loggedInPlayers) {
-	for (INT i = 0; i < loggedInPlayers; i++)
-		SetEvent(player[i].hUpdateMapEvent);
-}
-
 //Threads -> Ball
 DWORD WINAPI ThreadBall(LPVOID lpParameter) {
-	//TO DO
+	//Wait for other threads to be done using gameData
+	WaitForSingleObject(hGameDataMutex, INFINITE);
+		
+	ReleaseMutex(hGameDataMutex);
 	return 1;
 }
 
@@ -86,14 +85,15 @@ BOOL UsernameIsUnique(TCHAR username[USERNAME_MAX_LENGHT], _client* player) {
 				return FALSE;
 	return TRUE;
 }
-BOOL AddUserToLoggedInUsersArray(TCHAR updateMapEventName[20], TCHAR username[USERNAME_MAX_LENGHT], _client* player, INT pos, _base* base) {
-	player[pos].hUpdateMapEvent = CreateEvent(
+BOOL AddUserToLoggedInUsersArray(TCHAR updateBaseEventName[20], TCHAR username[USERNAME_MAX_LENGHT], _client* player, INT pos, _base* base) {
+	player[pos].hUpdateBaseEvent = CreateEvent(
 		NULL,	//Security attributes
 		FALSE,	//Automatic reset
 		FALSE,	//Inital state = not set
-		updateMapEventName);	//Event name (clients need the name to wait for their event to be set)
-	if (player[pos].hUpdateMapEvent != NULL) {
+		updateBaseEventName);	//Event name (clients need the name to wait for their event to be set)
+	if (player[pos].hUpdateBaseEvent != NULL) {
 		player[pos].base = base + pos;
+		player[pos].base->hasPlayer = TRUE;
 		_tcscpy_s(player[pos].username, USERNAME_MAX_LENGHT, username);
 		return TRUE;
 	}
@@ -132,14 +132,14 @@ DWORD WINAPI ThreadNewUsers(LPVOID lpParameter) {
 			WaitForSingleObject(hGameSettingsMutex, INFINITE);
 			if (_tcsnlen(param->gameMsgNewUser->username, USERNAME_MAX_LENGHT) > 0 && UsernameIsUnique(param->gameMsgNewUser->username, param->player) && (*param->loggedInPlayers) < MAX_PLAYERS) {
 				if (!param->gameSettings->hasStarted) {
-					//15 for "updateMapEvent_"
+					//16 for "updateBaseEvent_"
 					//4 for clientId -> [0, 9999]
 					//1 for '\0'
-					TCHAR updateMapEventName[20];
-					_stprintf_s(updateMapEventName, 20, TEXT("updateMapEvent_%d"), (*param->loggedInPlayers));
-					if (AddUserToLoggedInUsersArray(updateMapEventName, param->gameMsgNewUser->username, param->player, (*param->loggedInPlayers), param->baseBaseAddr)){
+					TCHAR updateBaseEventName[21];
+					_stprintf_s(updateBaseEventName, 21, TEXT("updateBaseEvent_%d"), (*param->loggedInPlayers));
+					if (AddUserToLoggedInUsersArray(updateBaseEventName, param->gameMsgNewUser->username, param->player, (*param->loggedInPlayers), param->baseBaseAddr)){
 						param->gameMsgNewUser->clientId = (*param->loggedInPlayers);
-						_tcscpy_s(param->gameMsgNewUser->updateMapEventName, 20, updateMapEventName);
+						_tcscpy_s(param->gameMsgNewUser->updateBaseEventName, 21, updateBaseEventName);
 						(*param->loggedInPlayers)++;
 						param->gameMsgNewUser->loggedIn = TRUE;
 					}
@@ -159,6 +159,13 @@ DWORD WINAPI ThreadNewUsers(LPVOID lpParameter) {
 }
 
 //Threads -> Player Msgs
+void NotifyAndWaitForPlayersToUpdateBase(_client* player, INT loggedInPlayers, HANDLE hBaseConfirmationSemaphore) {
+	for (INT i = 0; i < loggedInPlayers; i++)
+		SetEvent(player[i].hUpdateBaseEvent);
+
+	for (INT clientConfirmations = 0; clientConfirmations < loggedInPlayers; clientConfirmations++)
+		WaitForSingleObject(hBaseConfirmationSemaphore, INFINITE);
+}
 BOOL IsValidPlayerMsg(_clientMsg msg, _client* player, INT gameAreaWidth) {
 	//TODO: Take into account other "player bars" to avoid collisions here
 	if (msg.move == moveLeft && player[msg.clientId].base->rectangle.left - 1 >= 0)
@@ -169,9 +176,19 @@ BOOL IsValidPlayerMsg(_clientMsg msg, _client* player, INT gameAreaWidth) {
 }
 void UpdatePlayerBasePos(_clientMsg msg, _client* player) {
 	switch (msg.move) {
-		case moveLeft: player[msg.clientId].base->rectangle.left--; break;
-		case moveRight: player[msg.clientId].base->rectangle.right++; break;
+		case moveLeft: {
+			player[msg.clientId].base->rectangle.left -= player[msg.clientId].base->speed;
+			player[msg.clientId].base->rectangle.right -= player[msg.clientId].base->speed;
+		}break;
+		case moveRight: {
+			player[msg.clientId].base->rectangle.left += player[msg.clientId].base->speed;
+			player[msg.clientId].base->rectangle.right += player[msg.clientId].base->speed;
+		} break;
 	}
+	player[msg.clientId].base->changed = TRUE;
+}
+void ResetPlayerBaseChangedState(_clientMsg msg, _client* player) {
+	player[msg.clientId].base->changed = FALSE;
 }
 void WipeClientMsg(_clientMsg* clientMsg) {
 	clientMsg->move = none;
@@ -191,20 +208,33 @@ DWORD WINAPI ThreadProcessPlayerMsg(LPVOID lpParameter) {
 		0,			//Initial count
 		param->maxClientMsgs,
 		TEXT("newPlayerMsgSemaphore"));	//Semaphore name
-	if(hNewPlayerMsgMutex != NULL && hNewPlayerMsgSemaphore != NULL){
+	HANDLE hBaseConfirmationSemaphore = CreateSemaphore(
+		NULL,		//Canoot be inherited by child processes
+		0,			//Initial count
+		param->maxClientMsgs,
+		TEXT("baseConfirmationSemaphore"));	//Semaphore name
+	if(hNewPlayerMsgMutex != NULL && hNewPlayerMsgSemaphore != NULL && hBaseConfirmationSemaphore != NULL){
 		while (1) {
 			WaitForSingleObject(hNewPlayerMsgSemaphore, INFINITE);
-			//Wait for other threads to be done using player's array
-			WaitForSingleObject(hPlayerMutex, INFINITE);
-				if(ServerMsgPosReachedTheEnd(serverMsgPos, param->maxClientMsgs))
-					serverMsgPos = 0;
-				if (IsValidPlayerMsg(param->clientMsg[serverMsgPos], param->player, param->gameSettings->dimensions.width)) {
-					UpdatePlayerBasePos(param->clientMsg[serverMsgPos], param->player);
-					NotifyPlayers(param->player, (*param->loggedInPlayers));
-				}
-				WipeClientMsg(param->clientMsg + serverMsgPos);	//All param->clientMsg->move are initialized to 0 (none)
-				serverMsgPos++;
-			ReleaseMutex(hPlayerMutex);
+				//Wait for other threads to be done using player's array
+				WaitForSingleObject(hPlayerMutex, INFINITE);
+					if (ServerMsgPosReachedTheEnd(serverMsgPos, param->maxClientMsgs))
+						serverMsgPos = 0;
+					//Game has started and player msg is valid
+					if (param->gameSettings->hasStarted && IsValidPlayerMsg(param->clientMsg[serverMsgPos], param->player, param->gameSettings->dimensions.width)) {
+						//Wait for other threads to be done using gameData
+						WaitForSingleObject(hGameDataMutex, INFINITE);
+							//Update gameData->base
+							UpdatePlayerBasePos(param->clientMsg[serverMsgPos], param->player);
+							//Notify and await confirmation
+							NotifyAndWaitForPlayersToUpdateBase(param->player, (*param->loggedInPlayers), hBaseConfirmationSemaphore);
+							//Reset player base changed state 
+							ResetPlayerBaseChangedState(param->clientMsg[serverMsgPos], param->player);
+						ReleaseMutex(hGameDataMutex);
+					}
+					WipeClientMsg(param->clientMsg + serverMsgPos);	//All param->clientMsg->move are initialized to 0 (none)
+					serverMsgPos++;
+				ReleaseMutex(hPlayerMutex);
 		}
 	}
 	return 1;
@@ -292,21 +322,20 @@ INT GetActiveBalls(_ball* ball, INT maxBalls) {
 			total++;
 	return total;
 }
-BOOL LoadBalls(_gameData* gameDataStart, INT speed, INT size, INT gameAreaWidth, INT gameAreaHeight) {
+VOID LoadBalls(_gameData* gameDataStart, INT speed, INT size, INT gameAreaWidth, INT gameAreaHeight) {
 	for (INT i = 0; i < MAX_BALLS; i++) {
 		gameDataStart->ball[i].direction = topRight;
 		gameDataStart->ball[i].rectangle.left = (gameAreaWidth / 2) - (size / 2);
-		gameDataStart->ball[i].rectangle.top = (gameAreaHeight - 50);
+		gameDataStart->ball[i].rectangle.top = (gameAreaHeight - 100);
 		gameDataStart->ball[i].rectangle.right = gameDataStart->ball[i].rectangle.left + size;
 		gameDataStart->ball[i].rectangle.bottom = gameDataStart->ball[i].rectangle.top + size;
 		gameDataStart->ball[i].speed = speed;
 		gameDataStart->ball[i].isActive = FALSE;
 	}
-	return TRUE;
 }
 
 //GameData -> Blocks
-VOID InitBlocksrray(_gameData* gameDataStart, INT size) {
+VOID InitBlocks(_gameData* gameDataStart, INT size) {
 	//TODO: ADD SYNC MECHANISM HERE (gameDataStart is used in main thread (to generate new maps) and in the ball thread (to destroy blocks))
 	for (INT i = 0; i < size; i++) {
 		gameDataStart->block[i].type = normal;
@@ -342,7 +371,7 @@ BOOL GenerateMap(UINT seed, _gameSettings* gameSettings, _gameData* gameDataStar
 
 	gameSettings->totalBlocks = MIN_BLOCKS + (rand() % (MAX_BLOCKS-MIN_BLOCKS+1));	//Random value between [MIN_BLOCKS, MAX_BLOCKS]
 	
-	InitBlocksrray(gameDataStart, MAX_BLOCKS);	//Always intialize ALL blocks, 
+	InitBlocks(gameDataStart, MAX_BLOCKS);	//Always intialize ALL blocks, 
 	for (INT i = 0; i < gameSettings->totalBlocks; i++) {
 		do {
 			posX = borderPadding + ((rand() % maxBlocksPerLine) * gameSettings->blockDimensions.width);
@@ -357,6 +386,21 @@ BOOL GenerateMap(UINT seed, _gameSettings* gameSettings, _gameData* gameDataStar
 	return TRUE;
 }
 
+//GameData -> Bases
+VOID LoadBases(_gameData* gameDataStart, INT gameAreaWidth, INT gameAreaHeight) {
+	//size: 70
+	//speed: 2
+	for (INT i = 0; i < MAX_PLAYERS; i++) {
+		gameDataStart->base[i].rectangle.left = (gameAreaWidth / 2) - (70 / 2);
+		gameDataStart->base[i].rectangle.top = (gameAreaHeight - 80);
+		gameDataStart->base[i].rectangle.right = gameDataStart->base[i].rectangle.left + 70;
+		gameDataStart->base[i].rectangle.bottom = gameDataStart->base[i].rectangle.top + 20;
+		gameDataStart->base[i].hasPlayer = FALSE;
+		gameDataStart->base[i].changed = FALSE;
+		gameDataStart->base[i].speed = 2;
+	}
+}
+
 //Game -> Initializations
 BOOL InitializeSyncMechanisms() {
 	hPlayerMutex = CreateMutex(
@@ -364,6 +408,10 @@ BOOL InitializeSyncMechanisms() {
 		FALSE,	//The server doesn't "own" this mutex
 		NULL);	//Nameless mutex
 	hGameSettingsMutex = CreateMutex(
+		NULL,	//Canoot be inherited by child processes
+		FALSE,	//The server doesn't "own" this mutex
+		NULL);	//Nameless mutex
+	hGameDataMutex = CreateMutex(
 		NULL,	//Canoot be inherited by child processes
 		FALSE,	//The server doesn't "own" this mutex
 		NULL);	//Nameless mutex
@@ -419,6 +467,7 @@ BOOL LoadGameData(_gameSettings* gameSettings, _gameData* gameDataStart, INT bal
 	GetSystemInfo(&sysInfo);
 
 	LoadBalls(gameDataStart, ballSpeed, ballize, gameAreaWidth, gameAreaHeight);
+	LoadBases(gameDataStart, gameAreaWidth, gameAreaHeight);
 	GenerateMap(time(0), gameSettings, gameDataStart);
 
 	gameDataStart->clientMsgPos = 0;
@@ -432,7 +481,7 @@ BOOL LoadClientsArray(_client* player) {
 		player[i].score = -1;
 		player[i].base = NULL;
 		memset(player[i].username, 0, USERNAME_MAX_LENGHT);
-		player[i].hUpdateMapEvent = NULL;
+		player[i].hUpdateBaseEvent = NULL;
 	}
 	return TRUE;
 }

@@ -12,15 +12,16 @@ SYSTEM_INFO sysInfo;
 HANDLE hNewUserMutex = NULL;
 HANDLE hNewUserServerEvent = NULL;
 HANDLE hNewUserClientEvent = NULL;
-TCHAR updateMapEventName[20];	//Used in (UPDATE MAP) but recieved in (NEW USERS)
+TCHAR updateBaseEventName[21];	//Used in (UPDATE MAP) but recieved in (NEW USERS)
 //(PLAYER MSG)
 HANDLE hNewPlayerMsgMutex = NULL;
 HANDLE hNewPlayerMsgSemaphore = NULL;
 INT clientId = -1;
 //(UPDATE MAP)
-HANDLE hReadUpdatedMapThread = NULL;
-HANDLE hUpdateMapEvent = NULL;
+HANDLE hReadUpdatedBaseThread = NULL;
 _gameData cachedGameData;
+RECT deletedBasePart, newRectArea;
+BOOL firstPaint = TRUE;
 //------------------------------------------------------
 
 //"private" functions
@@ -93,7 +94,7 @@ void ReadLoginResponse(BOOL* loggedIn) {
 	WaitForSingleObject(hNewUserClientEvent, INFINITE);
 	if ((*loggedIn = gameMsgNewUser->loggedIn) == TRUE) {
 		clientId = gameMsgNewUser->clientId;
-		_tcscpy_s(updateMapEventName, 20, gameMsgNewUser->updateMapEventName);
+		_tcscpy_s(updateBaseEventName, 21, gameMsgNewUser->updateBaseEventName);
 	}
 	return;
 }
@@ -136,16 +137,19 @@ BOOL BallMoved(_ball oldBall, _ball newBall) {
 	return (oldBall.rectangle.left != newBall.rectangle.left ||
 			oldBall.rectangle.top != newBall.rectangle.top);
 }
-void CompareAndInvalidateGameData(HWND hGameWnd) {
-	for (int i = 0; i < MAX_BLOCKS; i++)
-		if (BlockWasDestroyed(cachedGameData.block[i], gameDataStart->block[i])) 
-			InvalidateRect(hGameWnd, &cachedGameData.block[i].rectangle, TRUE);
+void CompareAndInvalidateBases(HWND hGameWnd) {
+	//for (int i = 0; i < MAX_BLOCKS; i++)
+		//if (BlockWasDestroyed(cachedGameData.block[i], gameDataStart->block[i])) 
+			//InvalidateRect(hGameWnd, &cachedGameData.block[i].rectangle, TRUE);
 	for (int i = 0; i < MAX_PLAYERS; i++)
-		if (BaseMoved(cachedGameData.base[i], gameDataStart->base[i]))
-			InvalidateRect(hGameWnd, &cachedGameData.base[i].rectangle, TRUE);
-	for (int i = 0; i < MAX_BALLS; i++)
-		if (BallMoved(cachedGameData.ball[i], gameDataStart->ball[i]))
-			InvalidateRect(hGameWnd, &cachedGameData.ball[i].rectangle, TRUE);
+		if (BaseMoved(cachedGameData.base[i], gameDataStart->base[i])) {
+			SubtractRect(&deletedBasePart, &cachedGameData.base[i].rectangle, &gameDataStart->base[i]);
+			UnionRect(&newRectArea, &deletedBasePart, &gameDataStart->base[i].rectangle);
+			InvalidateRect(hGameWnd, &newRectArea, FALSE);
+		}
+	//for (int i = 0; i < MAX_BALLS; i++)
+		//if (BallMoved(cachedGameData.ball[i], gameDataStart->ball[i]))
+			//InvalidateRect(hGameWnd, &cachedGameData.ball[i].rectangle, TRUE);
 }
 void CopyGameData() {
 	for (int i = 0; i < MAX_BLOCKS; i++)
@@ -157,18 +161,23 @@ void CopyGameData() {
 	cachedGameData.clientMsgPos = gameDataStart->clientMsgPos;
 	cachedGameData.maxClientMsgs = gameDataStart->maxClientMsgs;
 }
-DWORD WINAPI UpdateMapThread(LPVOID lpParameter) {
-	HWND hGameWnd = *((HWND*)lpParameter);
-	hUpdateMapEvent = OpenEvent(SYNCHRONIZE | EVENT_MODIFY_STATE, //The right to use the object for synchronization
+DWORD WINAPI UpdateBasesThread(LPVOID lpParameter) {
+	HWND* hGameWnd = (HWND*)lpParameter;
+	HANDLE hUpdateBaseEvent = OpenEvent(SYNCHRONIZE | EVENT_MODIFY_STATE, //The right to use the object for synchronization
 		FALSE, //Child processess do NOT inherit this mutex
-		updateMapEventName //Event name
+		updateBaseEventName //Event name
 	);
-	if (hUpdateMapEvent != NULL) {
+	HANDLE hBaseConfirmationSemaphore = OpenSemaphore(SYNCHRONIZE | SEMAPHORE_MODIFY_STATE,
+		FALSE, //Child processess do NOT inherit this semaphore
+		TEXT("baseConfirmationSemaphore"));	//Semaphore name
+	if (hUpdateBaseEvent != NULL) {
+		CopyGameData();
 		while (1) {
-			WaitForSingleObject(hUpdateMapEvent, INFINITE);
-			CompareAndInvalidateGameData(hGameWnd);
-			UpdateWindow(hGameWnd);
+			WaitForSingleObject(hUpdateBaseEvent, INFINITE);
+			CompareAndInvalidateBases(*hGameWnd);
+			UpdateWindow(*hGameWnd);
 			CopyGameData();	//Can only copy after updating, because "InvalidateRect()" takes a pointer to RECT, not a copy of RECT
+			ReleaseSemaphore(hBaseConfirmationSemaphore, 1, NULL);	//"Send" confirmation to server that this client has stored the current state of the game
 		}
 	}
 	
@@ -206,36 +215,59 @@ void WritePlayerMsg(WPARAM wParam) {
 	ReleaseMutex(hNewPlayerMsgMutex);
 }
 //(UPDATE MAP)
-BOOL InitUpdateMapThread(HWND hGameWnd) {
-	hReadUpdatedMapThread = CreateThread(
+BOOL InitUpdateBaseThread(HWND* hGameWnd) {
+	hReadUpdatedBaseThread = CreateThread(
 		NULL,	//hThreadNewUsers cannot be inherited by child processes
 		0,	//Default stack size
-		UpdateMapThread,	//Function to execute
-		(LPVOID)&hGameWnd,	//Function param
+		UpdateBasesThread,	//Function to execute
+		(LPVOID)hGameWnd,	//Function param
 		0,	//The thread runs immediately after creation
 		NULL	//Thread ID is not stored anywhere
 	);
-	return hReadUpdatedMapThread != NULL;
+	return hReadUpdatedBaseThread != NULL;
 }
 DLL_API void PrintGameData(HDC hdc) {
 	RECT rectangle;
 	HBRUSH hBrushIn = CreateSolidBrush(RGB(255, 0, 0));
 	HBRUSH hBrushOut = CreateSolidBrush(RGB(0, 0, 0));
+	HBRUSH hBrushDeleted = CreateSolidBrush(GetDCBrushColor(hdc));
 
-	for (int i = 0; i < MAX_BLOCKS; i++) {
-		FillRect(hdc, &gameDataStart->block[i].rectangle, hBrushIn);
-		FrameRect(hdc, &gameDataStart->block[i].rectangle, hBrushOut);
+	if (firstPaint == TRUE) {
+		//Initial paint
+		for (int i = 0; i < MAX_BLOCKS; i++) {
+			FillRect(hdc, &gameDataStart->block[i].rectangle, hBrushIn);
+			FrameRect(hdc, &gameDataStart->block[i].rectangle, hBrushOut);
+		}
+		for (int i = 0; i < MAX_PLAYERS; i++) {
+			if (gameDataStart->base[i].hasPlayer) {
+				FillRect(hdc, &gameDataStart->base[i].rectangle, hBrushIn);
+				FrameRect(hdc, &gameDataStart->base[i].rectangle, hBrushOut);
+			}
+		}
+		for (int i = 0; i < MAX_BALLS; i++) {
+			FillRect(hdc, &gameDataStart->ball[i].rectangle, hBrushIn);
+			FrameRect(hdc, &gameDataStart->ball[i].rectangle, hBrushOut);
+		}
+		firstPaint = FALSE;
 	}
-	for (int i = 0; i < MAX_PLAYERS; i++) {
-		FillRect(hdc, &gameDataStart->base[i].rectangle, hBrushIn);
-		FrameRect(hdc, &gameDataStart->base[i].rectangle, hBrushOut);
+	else {
+		//Game has started
+		for (int i = 0; i < MAX_PLAYERS; i++) {
+			if (cachedGameData.base[i].hasPlayer && cachedGameData.base[i].changed) {
+				FillRect(hdc, &cachedGameData.base[i].rectangle, hBrushIn);
+				FrameRect(hdc, &cachedGameData.base[i].rectangle, hBrushOut);
+				FillRect(hdc, &deletedBasePart, hBrushDeleted);
+				FrameRect(hdc, &deletedBasePart, hBrushDeleted);
+				
+			}
+		}
+		for (int i = 0; i < MAX_BALLS; i++) {
+			if (gameDataStart->ball[i].isActive) {
+				FillRect(hdc, &cachedGameData.ball[i].rectangle, hBrushIn);
+				FrameRect(hdc, &cachedGameData.ball[i].rectangle, hBrushOut);
+			}
+		}
 	}
-	for (int i = 0; i < MAX_BALLS; i++) {
-		FillRect(hdc, &gameDataStart->ball[i].rectangle, hBrushIn);
-		FrameRect(hdc, &gameDataStart->ball[i].rectangle, hBrushOut);
-	}
-
-	
 }
 //(SERVER INITIALIZATION)
 BOOL LoadGameResources() {
