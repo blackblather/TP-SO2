@@ -5,6 +5,7 @@ LRESULT CALLBACK GameWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 static HBRUSH hbrBkgnd = NULL;
 const TCHAR LOGIN_CLASS_NAME[] = TEXT("Login Window Class");
 const TCHAR GAME_CLASS_NAME[] = TEXT("Game Window Class");
+HWND hGameWnd;
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine, int nCmdShow) {
 	if (!LoadGameResources())
@@ -133,7 +134,7 @@ LRESULT CALLBACK LoginWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 						//Logged in successfuly. Create amd open game window here
 						ShowWindow(hwnd, SW_HIDE);
 						// Create the game window.
-						HWND hGameWnd = CreateWindowEx(
+						hGameWnd = CreateWindowEx(
 							0,								// Optional window styles.
 							GAME_CLASS_NAME,						// Window class
 							TEXT("Arkanoid Client v1.0"),   // Window text
@@ -151,7 +152,7 @@ LRESULT CALLBACK LoginWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 						if (hwnd == NULL)
 							return 0;
 
-						if(InitUpdateMapThread(hGameWnd))
+						if(InitUpdateBaseThread(&hGameWnd))
 							//Created thread successfully
 							ShowWindow(hGameWnd, SW_SHOW);	//Show window
 						else {
