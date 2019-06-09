@@ -140,7 +140,7 @@ LRESULT CALLBACK LoginWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 							WS_OVERLAPPEDWINDOW,			// Window style
 
 							// Size and position
-							CW_USEDEFAULT, CW_USEDEFAULT, 555, 777,
+							CW_USEDEFAULT, CW_USEDEFAULT, 500, 750,
 
 							NULL,       // Parent window    
 							NULL,       // Menu
@@ -194,11 +194,20 @@ LRESULT CALLBACK LoginWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 	}
 }
 LRESULT CALLBACK GameWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+	HDC hdc;
+	PAINTSTRUCT ps;
 	switch (uMsg) {
 		case WM_KEYDOWN: {
 			if (wParam == VK_LEFT || wParam == VK_RIGHT)
 				WritePlayerMsg(wParam);
 			return 0;
+		} break;
+		case WM_PAINT: {
+			hdc = BeginPaint(hwnd, &ps);
+
+			PrintGameData(hdc);
+
+			EndPaint(hwnd, &ps);
 		} break;
 		case WM_CLOSE: {
 			if (MessageBox(hwnd, TEXT("Really quit?"), TEXT("My application"), MB_OKCANCEL) == IDOK)
