@@ -16,4 +16,4 @@ DLL_API BOOL LoadGameResources();
 DLL_API BOOL LoggedIn(TCHAR username[USERNAME_MAX_LENGHT]);
 DLL_API void WritePlayerMsg(WPARAM wParam);
 DLL_API BOOL InitUpdateBaseThread(HWND* hGameWnd);
-DLL_API void PrintGameData(HDC hdc);
+DLL_API void PrintGameData(HDC hdc, HWND hwnd);

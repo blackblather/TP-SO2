@@ -65,7 +65,7 @@ struct ball_STRUCT {
 struct base_STRUCT {
 	RECT rectangle;
 	INT speed;
-	BOOL changed, hasPlayer;
+	BOOL hasPlayer;
 } typedef _base;
 
 //BLOCK-----------------------------------
@@ -114,7 +114,7 @@ struct gameData_STRUCT {
 
 //GAMEMSG - NEW USER----------------------
 struct gameMsgNewUser_STRUCT {
-	TCHAR updateBaseEventName[21];
+	TCHAR updateMapEventName[20];
 	TCHAR username[256];
 	BOOL loggedIn;
 	INT clientId;

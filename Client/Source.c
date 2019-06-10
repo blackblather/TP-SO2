@@ -133,34 +133,47 @@ LRESULT CALLBACK LoginWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 					if (LoggedIn(username)) {
 						//Logged in successfuly. Create amd open game window here
 						ShowWindow(hwnd, SW_HIDE);
-						// Create the game window.
-						hGameWnd = CreateWindowEx(
-							0,								// Optional window styles.
-							GAME_CLASS_NAME,						// Window class
-							TEXT("Arkanoid Client v1.0"),   // Window text
-							WS_OVERLAPPEDWINDOW,			// Window style
+						//Create Rect with game client area size
+						RECT GameClientArea;
+						GameClientArea.top = 0;
+						GameClientArea.bottom = 750;
+						GameClientArea.left = 0;
+						GameClientArea.right = 490;
+						//Fill in GameClientArea
+						if (AdjustWindowRect(&GameClientArea, WS_OVERLAPPEDWINDOW, FALSE)) {
+							// Create the game window.
+							hGameWnd = CreateWindowEx(
+								0,								// Optional window styles.
+								GAME_CLASS_NAME,						// Window class
+								TEXT("Arkanoid Client v1.0"),   // Window text
+								WS_OVERLAPPEDWINDOW,			// Window style
 
-							// Size and position
-							CW_USEDEFAULT, CW_USEDEFAULT, 500, 750,
+								// Size and position
+								CW_USEDEFAULT, CW_USEDEFAULT,
+								GameClientArea.right - GameClientArea.left,
+								GameClientArea.bottom - GameClientArea.top,
 
-							NULL,       // Parent window    
-							NULL,       // Menu
-							NULL,		// Instance handle
-							NULL        // Additional application data
-						);
+								NULL,       // Parent window    
+								NULL,       // Menu
+								NULL,		// Instance handle
+								NULL        // Additional application data
+							);
 
-						if (hwnd == NULL)
-							return 0;
+							if (hwnd == NULL)
+								return 0;
 
-						if(InitUpdateBaseThread(&hGameWnd))
-							//Created thread successfully
-							ShowWindow(hGameWnd, SW_SHOW);	//Show window
-						else {
-							MessageBox(NULL, TEXT("Error creating 'Read Updated Map' thread.\nShutting down..."), TEXT("Error"), MB_OK | MB_ICONERROR);
+							if (InitUpdateBaseThread(&hGameWnd))
+								//Created thread successfully
+								ShowWindow(hGameWnd, SW_SHOW);	//Show window
+							else {
+								MessageBox(NULL, TEXT("Error creating 'Read Updated Map' thread.\nShutting down..."), TEXT("Error"), MB_OK | MB_ICONERROR);
+								PostQuitMessage(0);
+							}
+						} else {
+							MessageBox(NULL, TEXT("Error ajusting window rect.\nShutting down..."), TEXT("Error"), MB_OK | MB_ICONERROR);
 							PostQuitMessage(0);
 						}
-					}
-					else
+					} else
 						MessageBox(NULL, TEXT("Error logging in, please try again") , TEXT("Error"), MB_OK | MB_ICONERROR);
 				} break;
 			}
@@ -198,6 +211,12 @@ LRESULT CALLBACK GameWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 	HDC hdc;
 	PAINTSTRUCT ps;
 	switch (uMsg) {
+		case WM_CREATE: {
+			HDC hdc = GetDC(hwnd);
+			SetMapMode(hdc, MM_TEXT);
+			ReleaseDC(hwnd, hdc);
+			return 0;
+		} break;
 		case WM_KEYDOWN: {
 			if (wParam == VK_LEFT || wParam == VK_RIGHT)
 				WritePlayerMsg(wParam);
@@ -206,7 +225,7 @@ LRESULT CALLBACK GameWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 		case WM_PAINT: {
 			hdc = BeginPaint(hwnd, &ps);
 
-			PrintGameData(hdc);
+			PrintGameData(hdc, hwnd);
 
 			EndPaint(hwnd, &ps);
 		} break;

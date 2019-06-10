@@ -67,6 +67,12 @@ VOID CloseSharedInfoHandles(LPVOID messageBaseAddr, HANDLE hFileMapping, _gameDa
 	CloseHandle(hFileMapping);
 }
 
+//Used in "Threads -> Player Msgs" and "Threads -> New Users"
+void NotifyPlayers(_client* player, INT loggedInPlayers) {
+	for (INT i = 0; i < loggedInPlayers; i++)
+		SetEvent(player[i].hUpdateBaseEvent);
+}
+
 //Threads -> Ball
 DWORD WINAPI ThreadBall(LPVOID lpParameter) {
 	//Wait for other threads to be done using gameData
@@ -85,12 +91,12 @@ BOOL UsernameIsUnique(TCHAR username[USERNAME_MAX_LENGHT], _client* player) {
 				return FALSE;
 	return TRUE;
 }
-BOOL AddUserToLoggedInUsersArray(TCHAR updateBaseEventName[20], TCHAR username[USERNAME_MAX_LENGHT], _client* player, INT pos, _base* base) {
+BOOL AddUserToLoggedInUsersArray(TCHAR updateMapEventName[20], TCHAR username[USERNAME_MAX_LENGHT], _client* player, INT pos, _base* base) {
 	player[pos].hUpdateBaseEvent = CreateEvent(
 		NULL,	//Security attributes
 		FALSE,	//Automatic reset
 		FALSE,	//Inital state = not set
-		updateBaseEventName);	//Event name (clients need the name to wait for their event to be set)
+		updateMapEventName);	//Event name (clients need the name to wait for their event to be set)
 	if (player[pos].hUpdateBaseEvent != NULL) {
 		player[pos].base = base + pos;
 		player[pos].base->hasPlayer = TRUE;
@@ -132,14 +138,14 @@ DWORD WINAPI ThreadNewUsers(LPVOID lpParameter) {
 			WaitForSingleObject(hGameSettingsMutex, INFINITE);
 			if (_tcsnlen(param->gameMsgNewUser->username, USERNAME_MAX_LENGHT) > 0 && UsernameIsUnique(param->gameMsgNewUser->username, param->player) && (*param->loggedInPlayers) < MAX_PLAYERS) {
 				if (!param->gameSettings->hasStarted) {
-					//16 for "updateBaseEvent_"
+					//15 for "updateMapEvent_"
 					//4 for clientId -> [0, 9999]
 					//1 for '\0'
-					TCHAR updateBaseEventName[21];
-					_stprintf_s(updateBaseEventName, 21, TEXT("updateBaseEvent_%d"), (*param->loggedInPlayers));
-					if (AddUserToLoggedInUsersArray(updateBaseEventName, param->gameMsgNewUser->username, param->player, (*param->loggedInPlayers), param->baseBaseAddr)){
+					TCHAR updateMapEventName[20];
+					_stprintf_s(updateMapEventName, 20, TEXT("updateMapEvent_%d"), (*param->loggedInPlayers));
+					if (AddUserToLoggedInUsersArray(updateMapEventName, param->gameMsgNewUser->username, param->player, (*param->loggedInPlayers), param->baseBaseAddr)){
 						param->gameMsgNewUser->clientId = (*param->loggedInPlayers);
-						_tcscpy_s(param->gameMsgNewUser->updateBaseEventName, 21, updateBaseEventName);
+						_tcscpy_s(param->gameMsgNewUser->updateMapEventName, 20, updateMapEventName);
 						(*param->loggedInPlayers)++;
 						param->gameMsgNewUser->loggedIn = TRUE;
 					}
@@ -159,18 +165,11 @@ DWORD WINAPI ThreadNewUsers(LPVOID lpParameter) {
 }
 
 //Threads -> Player Msgs
-void NotifyAndWaitForPlayersToUpdateBase(_client* player, INT loggedInPlayers, HANDLE hBaseConfirmationSemaphore) {
-	for (INT i = 0; i < loggedInPlayers; i++)
-		SetEvent(player[i].hUpdateBaseEvent);
-
-	for (INT clientConfirmations = 0; clientConfirmations < loggedInPlayers; clientConfirmations++)
-		WaitForSingleObject(hBaseConfirmationSemaphore, INFINITE);
-}
 BOOL IsValidPlayerMsg(_clientMsg msg, _client* player, INT gameAreaWidth) {
 	//TODO: Take into account other "player bars" to avoid collisions here
-	if (msg.move == moveLeft && player[msg.clientId].base->rectangle.left - 1 >= 0)
+	if (msg.move == moveLeft && player[msg.clientId].base->rectangle.left - player[msg.clientId].base->speed >= 0)
 		return TRUE;
-	if (msg.move == moveRight && player[msg.clientId].base->rectangle.right + 1 <= gameAreaWidth)
+	if (msg.move == moveRight && player[msg.clientId].base->rectangle.right + player[msg.clientId].base->speed <= gameAreaWidth)
 		return TRUE;
 	return FALSE;
 }
@@ -185,10 +184,6 @@ void UpdatePlayerBasePos(_clientMsg msg, _client* player) {
 			player[msg.clientId].base->rectangle.right += player[msg.clientId].base->speed;
 		} break;
 	}
-	player[msg.clientId].base->changed = TRUE;
-}
-void ResetPlayerBaseChangedState(_clientMsg msg, _client* player) {
-	player[msg.clientId].base->changed = FALSE;
 }
 void WipeClientMsg(_clientMsg* clientMsg) {
 	clientMsg->move = none;
@@ -208,12 +203,7 @@ DWORD WINAPI ThreadProcessPlayerMsg(LPVOID lpParameter) {
 		0,			//Initial count
 		param->maxClientMsgs,
 		TEXT("newPlayerMsgSemaphore"));	//Semaphore name
-	HANDLE hBaseConfirmationSemaphore = CreateSemaphore(
-		NULL,		//Canoot be inherited by child processes
-		0,			//Initial count
-		param->maxClientMsgs,
-		TEXT("baseConfirmationSemaphore"));	//Semaphore name
-	if(hNewPlayerMsgMutex != NULL && hNewPlayerMsgSemaphore != NULL && hBaseConfirmationSemaphore != NULL){
+	if(hNewPlayerMsgMutex != NULL && hNewPlayerMsgSemaphore != NULL){
 		while (1) {
 			WaitForSingleObject(hNewPlayerMsgSemaphore, INFINITE);
 				//Wait for other threads to be done using player's array
@@ -227,9 +217,7 @@ DWORD WINAPI ThreadProcessPlayerMsg(LPVOID lpParameter) {
 							//Update gameData->base
 							UpdatePlayerBasePos(param->clientMsg[serverMsgPos], param->player);
 							//Notify and await confirmation
-							NotifyAndWaitForPlayersToUpdateBase(param->player, (*param->loggedInPlayers), hBaseConfirmationSemaphore);
-							//Reset player base changed state 
-							ResetPlayerBaseChangedState(param->clientMsg[serverMsgPos], param->player);
+							NotifyPlayers(param->player, (*param->loggedInPlayers));
 						ReleaseMutex(hGameDataMutex);
 					}
 					WipeClientMsg(param->clientMsg + serverMsgPos);	//All param->clientMsg->move are initialized to 0 (none)
@@ -396,7 +384,6 @@ VOID LoadBases(_gameData* gameDataStart, INT gameAreaWidth, INT gameAreaHeight) 
 		gameDataStart->base[i].rectangle.right = gameDataStart->base[i].rectangle.left + 70;
 		gameDataStart->base[i].rectangle.bottom = gameDataStart->base[i].rectangle.top + 20;
 		gameDataStart->base[i].hasPlayer = FALSE;
-		gameDataStart->base[i].changed = FALSE;
 		gameDataStart->base[i].speed = 2;
 	}
 }
