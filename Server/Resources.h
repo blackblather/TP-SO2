@@ -38,13 +38,13 @@ struct gameSettings_STRUCT {
 		duration,
 		speedUpChance,
 		slowDownChance,
-		lives,
-		totalBlocks;
+		lives;
 	_rect dimensions,
 		blockDimensions;
 
 	//Não configuráveis em "Defaults.txt"
 	BOOL hasStarted;	//Default sempre 0
+	INT totalBlocks;
 } typedef _gameSettings;
 
 //BALL------------------------------------
@@ -118,6 +118,7 @@ struct gameMsgNewUser_STRUCT {
 	TCHAR username[256];
 	BOOL loggedIn;
 	INT clientId;
+	INT clientAreaWidth, clientAreaHeight;
 } typedef _gameMsgNewUser;
 
 //GAMEMSG - CLIENT MSG--------------------

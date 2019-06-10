@@ -10,6 +10,9 @@
 	#define DLL_API __declspec(dllimport)
 #endif
 
+//Vars to export
+DLL_API INT clientAreaWidth, clientAreaHeight;
+
 //Functions to export
 DLL_API VOID CloseSharedInfoHandles();
 DLL_API BOOL LoadGameResources();

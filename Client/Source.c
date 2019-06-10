@@ -136,9 +136,9 @@ LRESULT CALLBACK LoginWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPa
 						//Create Rect with game client area size
 						RECT GameClientArea;
 						GameClientArea.top = 0;
-						GameClientArea.bottom = 750;
+						GameClientArea.bottom = clientAreaHeight;
 						GameClientArea.left = 0;
-						GameClientArea.right = 490;
+						GameClientArea.right = clientAreaWidth;
 						//Fill in GameClientArea
 						if (AdjustWindowRect(&GameClientArea, WS_OVERLAPPEDWINDOW, FALSE)) {
 							// Create the game window.

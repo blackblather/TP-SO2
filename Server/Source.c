@@ -146,6 +146,8 @@ DWORD WINAPI ThreadNewUsers(LPVOID lpParameter) {
 					if (AddUserToLoggedInUsersArray(updateMapEventName, param->gameMsgNewUser->username, param->player, (*param->loggedInPlayers), param->baseBaseAddr)){
 						param->gameMsgNewUser->clientId = (*param->loggedInPlayers);
 						_tcscpy_s(param->gameMsgNewUser->updateMapEventName, 20, updateMapEventName);
+						param->gameMsgNewUser->clientAreaWidth = param->gameSettings->dimensions.width;
+						param->gameMsgNewUser->clientAreaHeight = param->gameSettings->dimensions.height;
 						(*param->loggedInPlayers)++;
 						param->gameMsgNewUser->loggedIn = TRUE;
 					}

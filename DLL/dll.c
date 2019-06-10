@@ -92,6 +92,8 @@ void ReadLoginResponse(BOOL* loggedIn) {
 	if ((*loggedIn = gameMsgNewUser->loggedIn) == TRUE) {
 		clientId = gameMsgNewUser->clientId;
 		_tcscpy_s(updateMapEventName, 20, gameMsgNewUser->updateMapEventName);
+		clientAreaWidth = gameMsgNewUser->clientAreaWidth;
+		clientAreaHeight = gameMsgNewUser->clientAreaHeight;
 	}
 	return;
 }
