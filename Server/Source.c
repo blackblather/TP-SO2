@@ -5,6 +5,13 @@
 #include "Resources.h"
  
 //Server specific structs
+struct ballParam_STRUCT {
+	_gameSettings* gameSettings;
+	_ball* ball;
+	_block* block;
+	_client* player;
+	INT* loggedInPlayers;
+} typedef _ballParam;
 struct newUsersParam_STRUCT {
 	_gameSettings* gameSettings;
 	_gameMsgNewUser* gameMsgNewUser;
@@ -75,10 +82,104 @@ void NotifyPlayers(_client* player, INT loggedInPlayers) {
 
 //Threads -> Ball
 DWORD WINAPI ThreadBall(LPVOID lpParameter) {
-	//Wait for other threads to be done using gameData
-	WaitForSingleObject(hGameDataMutex, INFINITE);
-		
-	ReleaseMutex(hGameDataMutex);
+	_ballParam* param = (_ballParam*)lpParameter;
+	INT speed = param->gameSettings->defaultBallSpeed;
+	//Activate ball 1
+	param->ball[0].isActive = TRUE;
+	while (1) {
+		//Wait for other threads to be done using player's array
+		WaitForSingleObject(hPlayerMutex, INFINITE);
+		//Wait for other threads to be done using gameData
+		WaitForSingleObject(hGameDataMutex, INFINITE);
+		for (int i = 0; i < MAX_BALLS; i++) {
+			if(param->ball[i].isActive)
+				switch (param->ball[i].direction)
+				{
+					case topRight: {
+						if (param->ball[i].rectangle.right + speed < param->gameSettings->dimensions.width &&
+							param->ball[i].rectangle.top - speed > 0) {
+							//Tem espaço
+							param->ball[i].rectangle.right += speed;
+							param->ball[i].rectangle.left += speed;
+							param->ball[i].rectangle.top -= speed;
+							param->ball[i].rectangle.bottom -= speed;
+						} else {
+							if (param->ball[i].rectangle.right + speed >= param->gameSettings->dimensions.width) {
+								//Bateu de lado
+								param->ball[i].direction = topLeft;
+							} else {
+								//Bateu em cima
+								param->ball[i].direction = bottomRight;
+							}
+						}
+					} break;
+					case topLeft: {
+						if (param->ball[i].rectangle.left - speed > 0 &&
+							param->ball[i].rectangle.top - speed > 0) {
+							//Tem espaço
+							param->ball[i].rectangle.right -= speed;
+							param->ball[i].rectangle.left -= speed;
+							param->ball[i].rectangle.top -= speed;
+							param->ball[i].rectangle.bottom -= speed;
+						}
+						else {
+							if (param->ball[i].rectangle.left - speed <= 0) {
+								//Bateu de lado
+								param->ball[i].direction = topRight;
+							}
+							else {
+								//Bateu em cima
+								param->ball[i].direction = bottomLeft;
+							}
+						}
+					} break;
+					case bottomRight: {
+						if (param->ball[i].rectangle.right + speed < param->gameSettings->dimensions.width &&
+							param->ball[i].rectangle.bottom + speed < param->gameSettings->dimensions.height) {
+							//Tem espaço
+							param->ball[i].rectangle.right += speed;
+							param->ball[i].rectangle.left += speed;
+							param->ball[i].rectangle.top += speed;
+							param->ball[i].rectangle.bottom += speed;
+						}
+						else {
+							if (param->ball[i].rectangle.right + speed >= param->gameSettings->dimensions.width) {
+								//Bateu de lado
+								param->ball[i].direction = bottomLeft;
+							}
+							else {
+								//Bateu em baixo
+								param->ball[i].direction = topRight;
+							}
+						}
+					} break;
+					case bottomLeft: {
+						if (param->ball[i].rectangle.left - speed > 0 &&
+							param->ball[i].rectangle.bottom + speed < param->gameSettings->dimensions.height) {
+							//Tem espaço
+							param->ball[i].rectangle.right -= speed;
+							param->ball[i].rectangle.left -= speed;
+							param->ball[i].rectangle.top += speed;
+							param->ball[i].rectangle.bottom += speed;
+						}
+						else {
+							if (param->ball[i].rectangle.left - speed <= 0) {
+								//Bateu de lado
+								param->ball[i].direction = bottomRight;
+							}
+							else {
+								//Bateu em baixo
+								param->ball[i].direction = topLeft;
+							}
+						}
+					} break;
+				}
+		}
+		ReleaseMutex(hGameDataMutex);
+		NotifyPlayers(param->player, (*param->loggedInPlayers));
+		ReleaseMutex(hPlayerMutex);
+		Sleep(10);
+	}
 	return 1;
 }
 
@@ -218,7 +319,7 @@ DWORD WINAPI ThreadProcessPlayerMsg(LPVOID lpParameter) {
 						WaitForSingleObject(hGameDataMutex, INFINITE);
 							//Update gameData->base
 							UpdatePlayerBasePos(param->clientMsg[serverMsgPos], param->player);
-							//Notify and await confirmation
+
 							NotifyPlayers(param->player, (*param->loggedInPlayers));
 						ReleaseMutex(hGameDataMutex);
 					}
@@ -231,12 +332,17 @@ DWORD WINAPI ThreadProcessPlayerMsg(LPVOID lpParameter) {
 }
 
 //Threads -> Initializations
-BOOL InitThreadBall(HANDLE* hThreadBall) {
+BOOL InitThreadBall(HANDLE* hThreadBall, _gameSettings* gameSettings, _ball* ball, _block* block, _client* player, INT* loggedInPlayers, _ballParam* param) {
+	param->gameSettings = gameSettings;
+	param->ball = ball;
+	param->block = block;
+	param->player = player;
+	param->loggedInPlayers = loggedInPlayers;
 	(*hThreadBall) = CreateThread(
 		NULL,				//hThreadUsers cannot be inherited by child processes
 		0,					//Default stack size
 		ThreadBall,			//Function to execute
-		NULL,				//Function param
+		param,			//Function param
 		CREATE_SUSPENDED,	//Wait for game to start, to start thread execution
 		NULL				//Thread ID is not stored anywhere
 	);
@@ -287,8 +393,8 @@ BOOL InitThreadProcessPlayerMsg(HANDLE* hThreadProcessPlayerMsg, INT maxClientMs
 BOOL InitThreads(HANDLE* hThreadBall, HANDLE* hThreadNewUsers, HANDLE* hThreadProcessPlayerMsg,
 				 _gameSettings* gameSettings, _gameMsgNewUser* gameMsgNewUser, _client* player,
 				 INT* loggedInPlayers, _newUsersParam* newUsersParam, INT maxClientMsgs,
-				 _clientMsg* clientMsg, _processPlayerMsgParam* processPlayerMsgParam, _base* baseBaseAddr) {
-	if (InitThreadBall(hThreadBall)) {
+				 _clientMsg* clientMsg, _processPlayerMsgParam* processPlayerMsgParam, _base* baseBaseAddr, _ball* ball, _block* block, _ballParam* ballParam) {
+	if (InitThreadBall(hThreadBall, gameSettings, ball, block, player, loggedInPlayers, ballParam)) {
 		_tprintf(_T("Initialized 'ball' thread [SUSPENDED]\n"));
 		if (InitThreadNewUsers(hThreadNewUsers, gameSettings, gameMsgNewUser, player, loggedInPlayers, baseBaseAddr, newUsersParam)) {
 			_tprintf(_T("Initialized 'new users' thread [RUNNING]\n"));
@@ -524,14 +630,14 @@ BOOL InitializedServer(HANDLE* hFileMapping, LPVOID* messageBaseAddr, _gameData*
 					_gameMsgNewUser** gameMsgNewUser, _clientMsg** messageStart,
 					const _TCHAR* defaultsFileName, _gameSettings* gameSettings, PHKEY topTenKey,
 					HANDLE* hThreadBall, HANDLE* hThreadNewUsers, _newUsersParam* newUsersParam,
-					_client* player, int* loggedInPlayers, HANDLE* hThreadProcessPlayerMsg, _processPlayerMsgParam* processPlayerMsgParam) {
+					_client* player, int* loggedInPlayers, HANDLE* hThreadProcessPlayerMsg, _processPlayerMsgParam* processPlayerMsgParam, _ballParam* ballParam) {
 	if (LoadSharedInfo(hFileMapping, messageBaseAddr, gameDataStart, gameMsgNewUser, messageStart) &&
 		LoadGameSettings(defaultsFileName, gameSettings) &&
 		LoadGameData(gameSettings, (*gameDataStart), gameSettings->defaultBallSpeed, gameSettings->defaultBallSize, gameSettings->dimensions.width, gameSettings->dimensions.height) &&
 		LoadClientsArray(player) &&
 		LoadTopTen(topTenKey) &&
 		InitializeSyncMechanisms() &&
-		InitThreads(hThreadBall, hThreadNewUsers, hThreadProcessPlayerMsg, gameSettings, (*gameMsgNewUser), player, loggedInPlayers, newUsersParam, (*gameDataStart)->maxClientMsgs, (*messageStart), processPlayerMsgParam, (*gameDataStart)->base))
+		InitThreads(hThreadBall, hThreadNewUsers, hThreadProcessPlayerMsg, gameSettings, (*gameMsgNewUser), player, loggedInPlayers, newUsersParam, (*gameDataStart)->maxClientMsgs, (*messageStart), processPlayerMsgParam, (*gameDataStart)->base, (*gameDataStart)->ball, (*gameDataStart)->block,  ballParam))
 		return TRUE;
 	return FALSE;
 }
@@ -624,6 +730,7 @@ INT _tmain(INT argc, const _TCHAR* argv[]) {
 		HANDLE hThreadBall, hThreadNewUsers, hThreadProcessPlayerMsg;
 
 		//Thread params
+		_ballParam ballParam;
 		_newUsersParam param;
 		_processPlayerMsgParam processPlayerMsgParam;
 
@@ -636,7 +743,7 @@ INT _tmain(INT argc, const _TCHAR* argv[]) {
 							  &gameMsgNewUser, &messageStart,
 							  argv[1], &gameSettings, &topTenKey,
 							  &hThreadBall, &hThreadNewUsers, &param,
-							  player, &loggedInPlayers, &hThreadProcessPlayerMsg, &processPlayerMsgParam)) {
+							  player, &loggedInPlayers, &hThreadProcessPlayerMsg, &processPlayerMsgParam, &ballParam)) {
 			_tprintf(_T("Done!\n"));
 			CmdLoop(&gameSettings, &topTenKey, hThreadBall, gameDataStart);
 			CleanUp(messageBaseAddr, hFileMapping, gameDataStart);

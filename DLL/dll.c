@@ -12,7 +12,7 @@ SYSTEM_INFO sysInfo;
 HANDLE hNewUserMutex = NULL;
 HANDLE hNewUserServerEvent = NULL;
 HANDLE hNewUserClientEvent = NULL;
-TCHAR updateMapEventName[21];	//Used in (UPDATE MAP) but recieved in (NEW USERS)
+TCHAR updateMapEventName[20];	//Used in (UPDATE MAP) but recieved in (NEW USERS)
 //(PLAYER MSG)
 HANDLE hNewPlayerMsgMutex = NULL;
 HANDLE hNewPlayerMsgSemaphore = NULL;
@@ -131,7 +131,7 @@ DWORD WINAPI UpdateMapThread(LPVOID lpParameter) {
 	if (hUpdateMapEvent != NULL) {
 		while (1) {
 			WaitForSingleObject(hUpdateMapEvent, INFINITE);
-			InvalidateRect(*hGameWnd, NULL, FALSE);
+			InvalidateRect(*hGameWnd, NULL, TRUE);
 			UpdateWindow(*hGameWnd);
 		}
 	}
@@ -187,6 +187,7 @@ void PrintGameData(HDC hdc, HWND hwnd) {
 	HDC hdcMem, hbmOld;
 	HBITMAP hbmMem;
 	HBRUSH hBrushBaseIn = CreateSolidBrush(RGB(114, 116, 128));
+	HBRUSH hBrushBallIn = CreateSolidBrush(RGB(0, 116, 128));
 	HBRUSH hBrushIn = CreateSolidBrush(RGB(255, 0, 0));
 	HBRUSH hBrushOut = CreateSolidBrush(RGB(0, 0, 0));
 
@@ -211,7 +212,6 @@ void PrintGameData(HDC hdc, HWND hwnd) {
 	DeleteObject(hbrBkGnd);
 
 	
-
 	for (int i = 0; i < MAX_BLOCKS; i++) {
 		FillRect(hdcMem, &gameDataStart->block[i].rectangle, hBrushIn);
 		FrameRect(hdcMem, &gameDataStart->block[i].rectangle, hBrushOut);
@@ -223,8 +223,10 @@ void PrintGameData(HDC hdc, HWND hwnd) {
 		}
 	}
 	for (int i = 0; i < MAX_BALLS; i++) {
-		FillRect(hdcMem, &gameDataStart->ball[i].rectangle, hBrushIn);
-		FrameRect(hdcMem, &gameDataStart->ball[i].rectangle, hBrushOut);
+		if (gameDataStart->ball[i].isActive) {
+			FillRect(hdcMem, &gameDataStart->ball[i].rectangle, hBrushBallIn);
+			FrameRect(hdcMem, &gameDataStart->ball[i].rectangle, hBrushOut);
+		}
 	}
 
 	BitBlt(hdc,
@@ -238,6 +240,11 @@ void PrintGameData(HDC hdc, HWND hwnd) {
 
 	SelectObject(hdcMem, hbmOld);
 	DeleteObject(hbmMem);
+	DeleteObject(hbmOld);
+	DeleteObject(hBrushBaseIn);
+	DeleteObject(hBrushBallIn);
+	DeleteObject(hBrushIn);
+	DeleteObject(hBrushOut);
 	DeleteDC(hdcMem);
 }
 //(SERVER INITIALIZATION)

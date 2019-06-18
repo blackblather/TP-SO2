@@ -222,12 +222,17 @@ LRESULT CALLBACK GameWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 				WritePlayerMsg(wParam);
 			return 0;
 		} break;
+		case WM_ERASEBKGND: {
+			return 1;
+		} break;
 		case WM_PAINT: {
 			hdc = BeginPaint(hwnd, &ps);
 
 			PrintGameData(hdc, hwnd);
 
 			EndPaint(hwnd, &ps);
+
+			return 0;
 		} break;
 		case WM_CLOSE: {
 			if (MessageBox(hwnd, TEXT("Really quit?"), TEXT("My application"), MB_OKCANCEL) == IDOK)
